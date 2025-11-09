@@ -134,6 +134,15 @@
             background: linear-gradient(180deg, #72deff 0%, #4a0fb3 100%);
             box-shadow: 0 4px 12px rgba(76, 201, 240, 0.4);
         }
+        #fastForwardButton {
+            background: linear-gradient(180deg, #4cc9f0 0%, #3a0ca3 100%);
+            border: 2px solid #4cc9f0;
+            padding: 8px 20px;
+        }
+        #fastForwardButton:hover {
+            background: linear-gradient(180deg, #72deff 0%, #4a0fb3 100%);
+            box-shadow: 0 4px 12px rgba(76, 201, 240, 0.4);
+        }
         #pasteButton {
             background: linear-gradient(180deg, #4cc9f0 0%, #3a0ca3 100%);
             border: 2px solid #4cc9f0;
@@ -1461,6 +1470,7 @@
                 </div>
                 <button id="pauseButton" onclick="togglePause()">Pausar</button>
                 <button id="resetButton" onclick="resetSimulation()">Reiniciar</button>
+                <button id="fastForwardButton" onclick="fastForwardToEnd()">Ir al final</button>
             </div>
             <div id="scoreboard">
                 <div id="match-header"></div>
@@ -2084,14 +2094,16 @@
                 const redCards = player.Red;
                 const maxMin = hasExtraTime ? 120 : 90;
 
-                // Icono de salida si jugó menos de maxMin, no roja
-                if (minPlayed < maxMin && redCards === 0) {
-                    icons += `<img src="https://i.imgur.com/CpAkDu9.png" alt="Salida" style="width:18px;height:18px;margin-left:5px;">`;
-                }
+                if (minPlayed === 0) return '';
 
-                // Icono de entrada si suplente y jugó 1+ min
-                if (isSubstitutePlayer && minPlayed >= 1) {
-                    icons += `<img src="https://i.imgur.com/3LZgtAh.png" alt="Entrada" style="width:18px;height:18px;margin-left:5px;">`;
+                if (isSubstitutePlayer) {
+                    if (minPlayed >= 1) {
+                        icons += `<img src="https://i.imgur.com/3LZgtAh.png" alt="Entrada" style="width:18px;height:18px;margin-left:5px;">`;
+                    }
+                } else {
+                    if (minPlayed < maxMin && redCards === 0) {
+                        icons += `<img src="https://i.imgur.com/CpAkDu9.png" alt="Salida" style="width:18px;height:18px;margin-left:5px;">`;
+                    }
                 }
 
                 return icons;
@@ -3983,6 +3995,9 @@
                         if (document.getElementById('ratings-tab').classList.contains('active')) {
                             displayPlayerRatings();
                         }
+                        if (document.getElementById('experience-tab').classList.contains('active')) {
+                            displayExperiencePoints();
+                        }
                         // Mostrar eventos de mejor jugador al final
                         const bestPlayerEvents = allEventsData.filter(event => event.minute === 999);
                         bestPlayerEvents.forEach(event => {
@@ -4147,6 +4162,80 @@
             // Ocultar puntuaciones
             document.getElementById('ratings-message').style.display = 'block';
             document.getElementById('ratings-content').style.display = 'none';
+        }
+
+        function fastForwardToEnd() {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+            isPaused = true;
+            const narrationDiv = document.getElementById('narration');
+            narrationDiv.textContent = 'Avanzando al final...';
+            let currentMinute = 0;
+            let halftimeScore = null;
+
+            while (lineIndex < narrationLines.length) {
+                const line = narrationLines[lineIndex];
+
+                // Update minute
+                const minMatch = line.match(/Minuto de juego\s+(\d+)/);
+                if (minMatch) {
+                    currentMinute = parseInt(minMatch[1]);
+                }
+
+                // Update score
+                const scoreRegex = /\b(\d+-\d+)\b/;
+                const scoreMatch = line.match(scoreRegex);
+                if (scoreMatch) {
+                    const newScore = scoreMatch[1];
+                    document.getElementById('score').textContent = newScore;
+                    const [newHomeGoals, newAwayGoals] = newScore.split('-').map(Number);
+                    prevHomeGoals = newHomeGoals;
+                    prevAwayGoals = newAwayGoals;
+                }
+
+                // Check for halftime score
+                if (line.includes('Resultado al descanso:')) {
+                    halftimeScore = extractHalftimeScore(line);
+                    if (halftimeScore) {
+                        displayHalftimeScore(halftimeScore);
+                    }
+                }
+
+                // Display events
+                displayEventInRealTime(currentMinute);
+
+                // Check for FINAL
+                if (line.includes('FINAL')) {
+                    document.getElementById('minute').textContent = 'Finalizado';
+                    narrationDiv.style.display = 'none';
+                    matchFinished = true;
+                    // Extraer estadísticas al final del partido
+                    matchStats = extractMatchStats();
+                    playerStats = extractPlayerStats();
+                    // Mostrar estadísticas automáticamente si la pestaña está activa
+                    if (document.getElementById('stats-tab').classList.contains('active')) {
+                        displayMatchStats();
+                    }
+                    if (document.getElementById('ratings-tab').classList.contains('active')) {
+                        displayPlayerRatings();
+                    }
+                    if (document.getElementById('experience-tab').classList.contains('active')) {
+                        displayExperiencePoints();
+                    }
+                    // Mostrar eventos de mejor jugador al final
+                    const bestPlayerEvents = allEventsData.filter(event => event.minute === 999);
+                    bestPlayerEvents.forEach(event => {
+                        displayEventInRealTime(999);
+                    });
+                    break;
+                }
+
+                lineIndex++;
+            }
+
+            narrationDiv.textContent = 'FINAL DEL PARTIDO';
+            document.getElementById('minute').textContent = 'Finalizado';
         }
 
         // Funciones para el popup de configuración
