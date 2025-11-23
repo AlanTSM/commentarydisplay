@@ -6,6 +6,22 @@
     <title>Narrador dinámico de TSM</title>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
     <style>
+        /* Scrollbar consistente para toda la página */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #2a2a3e;
+            border-radius: 5px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #533d7d;
+            border-radius: 5px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #9d4edd;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
@@ -36,7 +52,7 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            font-family: 'Montserrat', sans-serif;
+            font-family: 'Impact', sans-serif; /* Cambiado a Impact */
             text-transform: uppercase;
             letter-spacing: 1px;
             font-size: 24px;
@@ -258,6 +274,7 @@
             margin-top: 15px;
             color: #e0e0e0;
             transition: all 0.3s ease;
+            font-weight: bold;
         }
         #narration.home-team-narration {
             background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
@@ -271,10 +288,24 @@
             font-weight: 700;
             color: #ffffff;
             text-align: center;
-            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 255, 255, 0.7);
             font-family: 'Montserrat', Arial, sans-serif;
             text-transform: uppercase;
             letter-spacing: 3px;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        #narration.goal-event {
+            font-size: 2em;
+            font-weight: 900;
+            color: #FFD700;
+            text-align: center;
+            text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.6), 0 0 25px rgba(255, 223, 0, 0.8);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-family: 'Arial', sans-serif;
+            background: #4a4a4a;
             border-radius: 12px;
             padding: 20px;
             box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.3);
@@ -1438,12 +1469,41 @@
         .settings-popup button {
             width: 100%;
         }
+
+        /* Estilos para la flecha de volver arriba */
+        #back-to-top {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: linear-gradient(180deg, #7b2cbf 0%, #5a189a 100%);
+            color: white;
+            border: 2px solid #9d4edd;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.2s;
+            font-size: 20px;
+            box-shadow: 0 4px 12px rgba(157, 78, 221, 0.4);
+            z-index: 1000;
+        }
+        #back-to-top.visible {
+            opacity: 1;
+        }
+        #back-to-top:hover {
+            background: linear-gradient(180deg, #9d4edd 0%, #7b2cbf 100%);
+            transform: scale(1.1);
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="title-container">
-            <h1 onclick="location.reload()">Narrador dinámico de partidos de TSM</h1>
+            <h1 onclick="location.reload()">NARRADOR DINÁMICO DE PARTIDOS DE TSM</h1>
             <div id="inputToggle" onclick="toggleInput()">▲</div>
         </div>
         <div id="inputSection">
@@ -1641,22 +1701,34 @@
     <div id="settings-popup-overlay" class="settings-popup-overlay" onclick="closeSettingsPopup()"></div>
     <div id="settings-popup" class="settings-popup">
         <span class="close" onclick="closeSettingsPopup()">&times;</span>
-        <h3>Configuración de Narración</h3>
+        <h3>Configuración de narración</h3>
         <label for="fontFamily">Fuente:</label>
         <select id="fontFamily">
-            <option value="Arial, sans-serif">Arial</option>
+            <option value="Arial, sans-serif" selected>Arial</option>
             <option value="'Segoe UI', Tahoma, Geneva, Verdana, sans-serif">Segoe UI</option>
+            <option value="'Montserrat', sans-serif">Montserrat</option>
             <option value="monospace">Monospace</option>
         </select>
         <label for="fontSize">Tamaño de fuente:</label>
         <select id="fontSize">
             <option value="12px">12px</option>
-            <option value="14px">14px</option>
+            <option value="14px" selected>14px</option>
             <option value="16px">16px</option>
             <option value="18px">18px</option>
         </select>
+        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+            <input type="checkbox" id="boldText" style="margin-right: 10px;" checked="checked">
+            <label for="boldText">Texto en negrita</label>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+            <input type="checkbox" id="skipEmptyMinutes" style="margin-right: 10px;" checked="checked">
+            <label for="skipEmptyMinutes">Omitir minutos sin ocasiones</label>
+        </div>
+        <p id="skipWarning" style="font-size: 12px; color: #ffcc00; display: none;">Opción solo disponible antes del inicio</p>
         <button onclick="applySettings()">Aplicar</button>
     </div>
+    <!-- Botón para volver arriba -->
+    <div id="back-to-top" onclick="scrollToTop()">▲</div>
     <script>
         let currentDelay = 2000;
         let inputVisible = true;
@@ -1680,6 +1752,9 @@
         let recentPlays = [];
         let playerStats = null;
         let matchTransitions = {};
+        let simulationStarted = false;
+        let skipEmptyMinutes = true; // Cambiado a true por defecto
+        let rawInput = '';
 
         // Bases de datos
         let playersDB = [];
@@ -2050,8 +2125,8 @@
                 const isPlayerOfTheMatch = isPlayerOfTheMatchHome && ratingInfo.player.Name === playerOfTheMatch;
                 
                 // Si es el jugador del partido pero no tiene la máxima puntuación, asignarle la máxima
-                if (isPlayerOfTheMatch && ratingInfo.rating < maxOverallRating) {
-                    ratingInfo.rating = maxOverallRating;
+                if (isPlayerOfTheMatch && ratingInfo.rating < maxHomeRating) {
+                    ratingInfo.rating = maxHomeRating;
                 }
             });
 
@@ -2059,8 +2134,8 @@
                 const isPlayerOfTheMatch = isPlayerOfTheMatchAway && ratingInfo.player.Name === playerOfTheMatch;
                 
                 // Si es el jugador del partido pero no tiene la máxima puntuación, asignarle la máxima
-                if (isPlayerOfTheMatch && ratingInfo.rating < maxOverallRating) {
-                    ratingInfo.rating = maxOverallRating;
+                if (isPlayerOfTheMatch && ratingInfo.rating < maxAwayRating) {
+                    ratingInfo.rating = maxAwayRating;
                 }
             });
 
@@ -2430,13 +2505,11 @@
         function getNarrationForMinute(minute) {
             const lines = originalNarrationText.split('\n');
             const minutePlays = [];
-            let currentPlay = [];
             
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
-                
                 if (line.includes(`Minuto de juego ${minute}`)) {
-                    currentPlay = [line];
+                    let currentPlay = [line];
                     i++;
                     
                     // Recoger todas las líneas de esta jugada
@@ -2452,18 +2525,19 @@
                 }
             }
             
-            // Devolver la primera jugada encontrada (o todas si múltiples, pero típicamente una)
-            return minutePlays.length > 0 ? minutePlays[0] : [];
+            return minutePlays;
         }
 
         // Función para obtener el resultado después de un gol
         function getGoalScore(minute) {
-            const narration = getNarrationForMinute(minute);
-            if (narration.length > 0) {
-                for (let i = narration.length - 1; i >= 0; i--) {
-                    const scoreMatch = narration[i].match(/(\d+-\d+)/);
-                    if (scoreMatch) {
-                        return scoreMatch[1];
+            const narrations = getNarrationForMinute(minute);
+            if (narrations.length > 0) {
+                for (let narration of narrations) {
+                    for (let i = narration.length - 1; i >= 0; i--) {
+                        const scoreMatch = narration[i].match(/(\d+-\d+)/);
+                        if (scoreMatch) {
+                            return scoreMatch[1];
+                        }
                     }
                 }
             }
@@ -2472,7 +2546,7 @@
 
         // Función para mostrar el popup de detalles del gol - MEJORADA
         function showGoalPopup(minute, player) {
-            const narration = getNarrationForMinute(minute);
+            const narrations = getNarrationForMinute(minute);
             const popup = document.getElementById('goalPopup');
             const popupTitle = document.getElementById('popupTitle');
             const popupNarration = document.getElementById('popupNarration');
@@ -2480,56 +2554,67 @@
             popupTitle.textContent = `Minuto ${minute}' - ${formatPlayerName(player)}`;
             popupNarration.innerHTML = '';
             
-            if (narration.length === 0) {
+            if (narrations.length === 0) {
                 popupNarration.innerHTML = '<p style="text-align: center; color: #b8b8d1;">No se encontró la narración para este gol</p>';
             } else {
-                // Incluir todas las líneas hasta la primera con resultado
-                let linesToShow = [];
-                let foundScore = false;
-                
-                for (let line of narration) {
-                    linesToShow.push(line);
-                    if (/\d+-\d+/.test(line)) {
-                        foundScore = true;
-                        break;
-                    }
-                }
-                
-                linesToShow.forEach((line, index) => {
-                    const div = document.createElement('div');
-                    div.className = 'narration-line';
+                narrations.forEach((narration, playIndex) => {
+                    // Incluir todas las líneas hasta la primera con resultado
+                    let linesToShow = [];
+                    let foundScore = false;
                     
-                    if (index === 0) {
-                        div.classList.add('first-line');
-                    }
-                    
-                    // Resaltar líneas con gol o marcador
-                    if (line.toLowerCase().includes('gol') || /\d+-\d+/.test(line)) {
-                        div.classList.add('highlight');
-                    }
-                    
-                    // Formatear la línea - eliminar "..." al inicio y formatear nombres
-                    let formattedLine = line.replace(/^\s*\.{3}\s*/, '• ');
-                    // Formatear nombres de jugadores en la narración
-                    formattedLine = formattedLine.replace(/\b[A-Za-z]+(?:_[A-Za-z]+)+\b/g, match => formatPlayerName(match));
-                    
-                    // Si la línea contiene "Gol", formatear a "¡¡¡GOOOOOOL!!!"
-                    if (line.toLowerCase().includes('gol')) {
-                        formattedLine = '¡¡¡GOOOOOOL!!!';
-                    }
-
-                    // Para la primera línea, tomar después de los dos puntos
-                    if (index === 0) {
-                        const colonIndex = line.indexOf(':');
-                        if (colonIndex !== -1) {
-                            formattedLine = line.substring(colonIndex + 1).trim();
-                            formattedLine = formattedLine.replace(/\b[A-Za-z]+(?:_[A-Za-z]+)+\b/g, match => formatPlayerName(match));
+                    narration.forEach((line, index) => {
+                        linesToShow.push(line);
+                        if (/\d+-\d+/.test(line)) {
+                            foundScore = true;
                         }
-                    }
+                    });
                     
-                    div.textContent = formattedLine;
-                    
-                    popupNarration.appendChild(div);
+                    linesToShow.forEach((line, index) => {
+                        const div = document.createElement('div');
+                        div.className = 'narration-line';
+                        
+                        if (index === 0) {
+                            div.classList.add('first-line');
+                        }
+                        
+                        // Resaltar líneas con gol o marcador
+                        if (line.toLowerCase().includes('gol') || /\d+-\d+/.test(line)) {
+                            div.classList.add('highlight');
+                        }
+                        
+                        // Formatear la línea - eliminar "..." al inicio y formatear nombres
+                        let formattedLine = line.replace(/^\s*\.{3}\s*/, '• ');
+                        // Formatear nombres de jugadores en la narración
+                        formattedLine = formattedLine.replace(/\b[A-Za-z]+(?:_[A-Za-z]+)+\b/g, match => formatPlayerName(match));
+                        // Omitir @
+                        formattedLine = formattedLine.replace(/@/g, '');
+                        
+                        // Para la primera línea, tomar después de los dos puntos y filtrar equipo
+                        if (index === 0) {
+                            const colonIndex = line.indexOf(':');
+                            if (colonIndex !== -1) {
+                                let afterColon = line.substring(colonIndex + 1).trim();
+                                // Remover nombre del equipo si está al inicio
+                                if (afterColon.startsWith(homeTeamName)) {
+                                    afterColon = afterColon.substring(homeTeamName.length).trim();
+                                } else if (afterColon.startsWith(awayTeamName)) {
+                                    afterColon = afterColon.substring(awayTeamName.length).trim();
+                                }
+                                formattedLine = afterColon.replace(/^\s*\.{3}\s*/, '• ');
+                                formattedLine = formattedLine.replace(/\b[A-Za-z]+(?:_[A-Za-z]+)+\b/g, match => formatPlayerName(match));
+                                formattedLine = formattedLine.replace(/@/g, '');
+                            }
+                        }
+                        
+                        // Si la línea empieza con "Gol ", formatear a "¡¡¡GOOOOOOL!!!"
+                        if (formattedLine.startsWith('Gol ')) {
+                            formattedLine = '¡¡¡GOOOOOOL!!!' + formattedLine.substring(4);
+                        }
+
+                        div.textContent = formattedLine;
+                        
+                        popupNarration.appendChild(div);
+                    });
                 });
             }
             
@@ -2695,7 +2780,7 @@
             try {
                 const text = await navigator.clipboard.readText();
                 textarea.value = text;
-                // Validar formato automáticamente después de pegar
+                // Validar formato automáticamente automáticamente después de pegar
                 validateAndParse();
             } catch (err) {
                 alert('No se pudo acceder al portapapeles. Por favor, pega manualmente el partido.');
@@ -2729,7 +2814,13 @@
                 return;
             }
 
-            await parseAndDisplay();
+            rawInput = inputText;
+            let formattedInput = inputText;
+            if (!skipEmptyMinutes) {
+                formattedInput = processInput(inputText);
+            }
+
+            await parseAndDisplay(formattedInput);
             await fetchBadgesAndStadia();
         }
         
@@ -3074,7 +3165,7 @@
             statsHTML += `<div class="stat ${statsToHighlight.includes('Tiros:') ? 'highlight' : ''}"><span class="label">Tiros:</span> <span class="value">${player.Sht}</span></div>`;
             statsHTML += `<div class="stat ${statsToHighlight.includes('Goles:') ? 'highlight' : ''}"><span class="label">Goles:</span> <span class="value">${player.Gls}</span></div>`;
             statsHTML += `<div class="stat ${statsToHighlight.includes('Asistencias:') ? 'highlight' : ''}"><span class="label">Asistencias:</span> <span class="value">${player.Ass}</span></div>`;
-            statsHTML += `<div class="stat"><span class="label">Puntos de discipline:</span> <span class="value">${player.DP}</span></div>`;
+            statsHTML += `<div class="stat"><span class="label">Puntos de disciplina:</span> <span class="value">${player.DP}</span></div>`;
             statsHTML += `<div class="stat"><span class="label">Partidos lesionado:</span> <span class="value">${player.Inj}</span></div>`;
             statsHTML += `<div class="stat"><span class="label">Partidos sancionado:</span> <span class="value">${player.Sus}</span></div>`;
             statsHTML += `<div class="stat"><span class="label">Forma física:</span> <span class="value">${player.Fit}</span></div>`;
@@ -3258,9 +3349,11 @@
 
             if (line.includes('*************  media parte  ****************')) {
                 narrationDiv.textContent = 'MEDIA PARTE';
+                narrationDiv.className = 'special-event';
                 return true;
             } else if (line.includes('*************  FINAL  ****************')) {
                 narrationDiv.textContent = 'FINAL DEL PARTIDO';
+                narrationDiv.className = 'special-event';
                 matchFinished = true;
                 // Extraer estadísticas al final del partido
                 matchStats = extractMatchStats();
@@ -3275,17 +3368,14 @@
                 if (document.getElementById('experience-tab').classList.contains('active')) {
                     displayExperiencePoints();
                 }
-                // Mostrar eventos de mejor jugador al final
-                const bestPlayerEvents = allEventsData.filter(event => event.minute === 999);
-                bestPlayerEvents.forEach(event => {
-                    displayEventInRealTime(999);
-                });
                 return true;
             } else if (line.includes('*************  PRÓRROGA  ****************')) {
                 narrationDiv.textContent = 'PRÓRROGA';
+                narrationDiv.className = 'special-event';
                 return true;
             } else if (line.includes('*************  TANDA DE PENALTIS  *************')) {
                 narrationDiv.textContent = 'TANDA DE PENALTIS';
+                narrationDiv.className = 'special-event';
                 return true;
             }
 
@@ -3306,7 +3396,6 @@
             } else {
                 inputSection.style.display = 'block';
                 inputToggle.innerHTML = '▲';
-                instruction.style.display = 'block';
             }
             inputVisible = !inputVisible;
         }
@@ -3569,8 +3658,7 @@
             return `${minute}`;
         }
 
-        async function parseAndDisplay() {
-            const input = document.getElementById('input').value;
+        async function parseAndDisplay(input) {
             if (!input.trim()) {
                 return;
             }
@@ -3683,7 +3771,7 @@
                 }
                 i++;
             }
-            // Función para procesar jugadores con banderas y eventos de clic
+            // Función para procesar jugador con banderas y eventos de clic
             function processPlayerLineup(line, isHome, isStarter) {
                 let playerPart, pos;
                 if (isHome) {
@@ -3956,6 +4044,7 @@
         }
         
         function startSimulation() {
+            simulationStarted = true;
             playWhistleSound();
             lineIndex = 0;
             isPaused = false;
@@ -3980,6 +4069,13 @@
 
                 if (lineIndex < narrationLines.length) {
                     const line = narrationLines[lineIndex];
+                    // Ocultar líneas que contienen exactamente "---"
+                    if (line.trim() === '---') {
+                        lineIndex++;
+                        timeoutId = setTimeout(showNextLine, currentDelay);
+                        return;
+                    }
+                    
                     // Check for FINAL
                     if (line.includes('FINAL')) {
                         document.getElementById('minute').textContent = 'Finalizado';
@@ -4030,9 +4126,16 @@
                         // Mostrar la narración
                         const colonIndex = line.indexOf(':');
                         if (colonIndex !== -1) {
-                            const afterColon = line.substring(colonIndex + 1).trim();
+                            let afterColon = line.substring(colonIndex + 1).trim();
+                            // Remover nombre del equipo si está al inicio
+                            if (afterColon.startsWith(homeTeamName)) {
+                                afterColon = afterColon.substring(homeTeamName.length).trim();
+                            } else if (afterColon.startsWith(awayTeamName)) {
+                                afterColon = afterColon.substring(awayTeamName.length).trim();
+                            }
                             narrationDiv.textContent = afterColon;
                             narrationDiv.className = '';
+                            narrationDiv.style.fontWeight = 'normal'; // Asegurar no negrita al inicio
 
                             // Aplicar color según el equipo
                             if (currentTeamColor) {
@@ -4079,16 +4182,20 @@
                         // MODIFICACIÓN: Reemplazar "Gol " por "¡¡¡GOOOOOOL!!! " al inicio de la línea
                         if (cleanLine.startsWith('Gol ')) {
                             cleanLine = '¡¡¡GOOOOOOL!!! ' + cleanLine.substring(4);
+                            narrationDiv.textContent = cleanLine;
+                            narrationDiv.className = 'goal-event';
+                        } else {
+                            narrationDiv.textContent = cleanLine;
+                            narrationDiv.className = '';
+                            narrationDiv.style.fontWeight = 'normal';
                         }
-
-                        narrationDiv.textContent = cleanLine;
-                        narrationDiv.style.fontWeight = 'normal';
 
                         // Mantener el color actual para líneas consecutivas
                         if (currentTeamColor) {
                             const colors = getTeamColors(currentTeamColor);
                             narrationDiv.style.background = colors.primary;
                             narrationDiv.style.color = colors.secondary;
+                            narrationDiv.style.fontWeight = 'normal';
                         } else {
                             narrationDiv.style.background = '#1e1e30';
                             narrationDiv.style.color = '#e0e0e0';
@@ -4128,6 +4235,7 @@
         }
         
         function resetSimulation() {
+            simulationStarted = false;
             if (timeoutId) {
                 clearTimeout(timeoutId);
             }
@@ -4176,6 +4284,12 @@
 
             while (lineIndex < narrationLines.length) {
                 const line = narrationLines[lineIndex];
+                
+                // Ocultar líneas que contienen exactamente "---"
+                if (line.trim() === '---') {
+                    lineIndex++;
+                    continue;
+                }
 
                 // Update minute
                 const minMatch = line.match(/Minuto de juego\s+(\d+)/);
@@ -4240,6 +4354,16 @@
 
         // Funciones para el popup de configuración
         function openSettingsPopup() {
+            const skipCheckbox = document.getElementById('skipEmptyMinutes');
+            const skipWarning = document.getElementById('skipWarning');
+            skipCheckbox.checked = skipEmptyMinutes;
+            if (simulationStarted) {
+                skipCheckbox.disabled = true;
+                skipWarning.style.display = 'block';
+            } else {
+                skipCheckbox.disabled = false;
+                skipWarning.style.display = 'none';
+            }
             document.getElementById('settings-popup').style.display = 'block';
             document.getElementById('settings-popup-overlay').style.display = 'block';
         }
@@ -4252,11 +4376,99 @@
         function applySettings() {
             const fontFamily = document.getElementById('fontFamily').value;
             const fontSize = document.getElementById('fontSize').value;
+            const boldText = document.getElementById('boldText').checked;
+            const skipCheckbox = document.getElementById('skipEmptyMinutes');
+            const prevSkip = skipEmptyMinutes;
+            if (!simulationStarted) {
+                skipEmptyMinutes = skipCheckbox.checked;
+            }
             const narrationDiv = document.getElementById('narration');
             narrationDiv.style.fontFamily = fontFamily;
             narrationDiv.style.fontSize = fontSize;
+            narrationDiv.style.fontWeight = boldText ? 'bold' : 'normal';
+            if (!simulationStarted && skipEmptyMinutes !== prevSkip) {
+                if (skipEmptyMinutes) {
+                    textarea.value = rawInput;
+                } else {
+                    textarea.value = processInput(rawInput);
+                }
+                validateAndParse();
+            }
             closeSettingsPopup();
         }
+
+        function processInput(input) {
+            let lines = input.split('\n');
+            let output = '';
+            let minute = 0;
+            let halfTimeCount = 0;
+            let extraTime = false;
+            let finalFound = false;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                if (line.includes('*************  FINAL  ****************')) {
+                    output += line + '\n';
+                    finalFound = true;
+                    continue;
+                }
+                
+                // Si ya encontramos FINAL, solo añadir las líneas sin procesar minutos
+                if (finalFound) {
+                    output += line + '\n';
+                    continue;
+                }
+                
+                if (line.includes('Minuto de juego')) {
+                    const match = line.match(/Minuto de juego (\d+)/);
+                    if (match) {
+                        const currentMinute = parseInt(match[1]);
+                        // Añadir minutos faltantes ANTES de la línea actual
+                        while (minute < currentMinute - 1) {
+                            minute++;
+                            output += `Minuto de juego ${minute}  :---\n`;
+                        }
+                        minute = currentMinute;
+                    }
+                    output += line + '\n';
+                } else if (line.includes('*************  media parte  ****************')) {
+                    halfTimeCount++;
+                    if (halfTimeCount === 1) {
+                        minute = 45;
+                    } else if (halfTimeCount === 2) {
+                        minute = 105;
+                    }
+                    output += line + '\n';
+                } else if (line.includes('*************  PRÓRROGA  ****************')) {
+                    minute = 90;
+                    extraTime = true;
+                    output += line + '\n';
+                } else {
+                    output += line + '\n';
+                }
+            }
+
+            return output;
+        }
+
+        // Función para scroll suave al top
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+        // Mostrar/ocultar botón de volver arriba
+        window.addEventListener('scroll', () => {
+            const button = document.getElementById('back-to-top');
+            if (window.scrollY > 300) {
+                button.classList.add('visible');
+            } else {
+                button.classList.remove('visible');
+            }
+        });
     </script>
 </body>
 </html>
