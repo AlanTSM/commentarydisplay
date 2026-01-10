@@ -1715,6 +1715,8 @@
             <option value="14px" selected>14px</option>
             <option value="16px">16px</option>
             <option value="18px">18px</option>
+            <option value="20px">20px</option>
+            <option value="22px">22px</option>
         </select>
         <div style="display: flex; align-items: center; margin-bottom: 10px;">
             <input type="checkbox" id="boldText" style="margin-right: 10px;" checked="checked">
@@ -1723,6 +1725,10 @@
         <div style="display: flex; align-items: center; margin-bottom: 10px;">
             <input type="checkbox" id="skipEmptyMinutes" style="margin-right: 10px;" checked="checked">
             <label for="skipEmptyMinutes">Omitir minutos sin ocasiones</label>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+            <input type="checkbox" id="showAlternateColorsField" style="margin-right: 10px;" checked="checked">
+            <label for="showAlternateColorsField">Mostrar "Colores suplentes" y botón "Ver campo"</label>
         </div>
         <p id="skipWarning" style="font-size: 12px; color: #ffcc00; display: none;">Opción solo disponible antes del inicio</p>
         <button onclick="applySettings()">Aplicar</button>
@@ -1755,6 +1761,7 @@
         let simulationStarted = false;
         let skipEmptyMinutes = true; // Cambiado a true por defecto
         let rawInput = '';
+        let showAlternateColorsField = true; // Nueva variable para controlar visibilidad
 
         // Bases de datos
         let playersDB = [];
@@ -3658,6 +3665,40 @@
             return `${minute}`;
         }
 
+        // Función para aplicar estilos de narración
+        function applyNarrationStyles() {
+            const narrationDiv = document.getElementById('narration');
+            const fontFamily = document.getElementById('fontFamily').value;
+            const fontSize = document.getElementById('fontSize').value;
+            const boldText = document.getElementById('boldText').checked;
+            
+            narrationDiv.style.fontFamily = fontFamily;
+            narrationDiv.style.fontSize = fontSize;
+            narrationDiv.style.fontWeight = boldText ? 'bold' : 'normal';
+        }
+
+        // Función para mostrar/ocultar elementos de colores suplentes y botones de campo
+        function toggleAlternateColorsFieldButtons() {
+            const alternateContainers = document.querySelectorAll('.alternate-colors-container');
+            const fieldButtons = document.querySelectorAll('.view-field-btn');
+            
+            if (showAlternateColorsField) {
+                alternateContainers.forEach(container => {
+                    container.style.display = 'flex';
+                });
+                fieldButtons.forEach(button => {
+                    button.style.display = 'block';
+                });
+            } else {
+                alternateContainers.forEach(container => {
+                    container.style.display = 'none';
+                });
+                fieldButtons.forEach(button => {
+                    button.style.display = 'none';
+                });
+            }
+        }
+
         async function parseAndDisplay(input) {
             if (!input.trim()) {
                 return;
@@ -3945,6 +3986,10 @@
 
             const awaySubsList = lineupsDiv.querySelector('.team-section:last-child .subs');
             awaySubs.forEach(player => awaySubsList.appendChild(player));
+            
+            // Aplicar visibilidad de elementos
+            toggleAlternateColorsFieldButtons();
+            
             // Parse referee (optional)
             const refereeInfo = document.getElementById('referee-info');
             refereeInfo.innerHTML = '';
@@ -4063,6 +4108,9 @@
             narrationDiv.style.color = '#e0e0e0';
             narrationDiv.style.display = 'flex';
             narrationDiv.className = '';
+            
+            // Aplicar estilos de narración
+            applyNarrationStyles();
 
             showNextLine = function() {
                 if (isPaused) return;
@@ -4135,7 +4183,9 @@
                             }
                             narrationDiv.textContent = afterColon;
                             narrationDiv.className = '';
-                            narrationDiv.style.fontWeight = 'normal'; // Asegurar no negrita al inicio
+                            
+                            // Aplicar estilos de narración (incluyendo negrita si está activada)
+                            applyNarrationStyles();
 
                             // Aplicar color según el equipo
                             if (currentTeamColor) {
@@ -4187,15 +4237,16 @@
                         } else {
                             narrationDiv.textContent = cleanLine;
                             narrationDiv.className = '';
-                            narrationDiv.style.fontWeight = 'normal';
                         }
+
+                        // Aplicar estilos de narración (incluyendo negrita si está activada)
+                        applyNarrationStyles();
 
                         // Mantener el color actual para líneas consecutivas
                         if (currentTeamColor) {
                             const colors = getTeamColors(currentTeamColor);
                             narrationDiv.style.background = colors.primary;
                             narrationDiv.style.color = colors.secondary;
-                            narrationDiv.style.fontWeight = 'normal';
                         } else {
                             narrationDiv.style.background = '#1e1e30';
                             narrationDiv.style.color = '#e0e0e0';
@@ -4256,6 +4307,10 @@
             narrationDiv.style.color = '#e0e0e0';
             narrationDiv.style.display = 'flex';
             narrationDiv.className = '';
+            
+            // Aplicar estilos de narración
+            applyNarrationStyles();
+            
             lineIndex = 0;
 
             // Limpiar línea de tiempo
@@ -4355,8 +4410,10 @@
         // Funciones para el popup de configuración
         function openSettingsPopup() {
             const skipCheckbox = document.getElementById('skipEmptyMinutes');
+            const showAlternateCheckbox = document.getElementById('showAlternateColorsField');
             const skipWarning = document.getElementById('skipWarning');
             skipCheckbox.checked = skipEmptyMinutes;
+            showAlternateCheckbox.checked = showAlternateColorsField;
             if (simulationStarted) {
                 skipCheckbox.disabled = true;
                 skipWarning.style.display = 'block';
@@ -4378,14 +4435,22 @@
             const fontSize = document.getElementById('fontSize').value;
             const boldText = document.getElementById('boldText').checked;
             const skipCheckbox = document.getElementById('skipEmptyMinutes');
+            const showAlternateCheckbox = document.getElementById('showAlternateColorsField');
             const prevSkip = skipEmptyMinutes;
+            
+            // Actualizar configuración
             if (!simulationStarted) {
                 skipEmptyMinutes = skipCheckbox.checked;
             }
-            const narrationDiv = document.getElementById('narration');
-            narrationDiv.style.fontFamily = fontFamily;
-            narrationDiv.style.fontSize = fontSize;
-            narrationDiv.style.fontWeight = boldText ? 'bold' : 'normal';
+            
+            showAlternateColorsField = showAlternateCheckbox.checked;
+            
+            // Aplicar estilos de narración
+            applyNarrationStyles();
+            
+            // Aplicar visibilidad de elementos
+            toggleAlternateColorsFieldButtons();
+            
             if (!simulationStarted && skipEmptyMinutes !== prevSkip) {
                 if (skipEmptyMinutes) {
                     textarea.value = rawInput;
@@ -4468,6 +4533,11 @@
             } else {
                 button.classList.remove('visible');
             }
+        });
+        
+        // Inicializar visibilidad de elementos al cargar
+        window.addEventListener('DOMContentLoaded', function() {
+            toggleAlternateColorsFieldButtons();
         });
     </script>
 </body>
