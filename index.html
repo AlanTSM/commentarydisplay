@@ -1742,7 +1742,7 @@
             padding: 20px;
             z-index: 1000;
             color: #e0e0e0;
-            max-width: 400px;
+            max-width: 450px;
             width: 90%;
             max-height: 80vh;
             overflow-y: auto;
@@ -1897,6 +1897,40 @@
         #back-to-top:hover {
             background: linear-gradient(180deg, #9d4edd 0%, #7b2cbf 100%);
             transform: scale(1.1);
+        }
+
+        /* Estilos para el campo de carga de imagen del estadio */
+        #stadium-image-upload {
+            margin-bottom: 15px;
+        }
+        #stadium-image-upload input {
+            background: #2a2a3e;
+            border: 1px solid #533d7d;
+            border-radius: 5px;
+            padding: 6px;
+            color: #e0e0e0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        #capacity-input {
+            width: 100%;
+            padding: 8px;
+            border: 2px solid #533d7d;
+            border-radius: 5px;
+            background: #2a2a3e;
+            color: #e0e0e0;
+            font-size: 14px;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+        }
+        .weather-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .weather-row select {
+            flex: 1;
+            margin-bottom: 0;
         }
     </style>
 </head>
@@ -2097,7 +2131,7 @@
             <div id="popupNarration"></div>
         </div>
     </div>
-    <!-- Popup para configuración - MODIFICADO -->
+    <!-- Popup para configuración - MODIFICADO CON NUEVAS SECCIONES -->
     <div id="settings-popup-overlay" class="settings-popup-overlay" onclick="closeSettingsPopup()"></div>
     <div id="settings-popup" class="settings-popup">
         <span class="close" onclick="closeSettingsPopup()">&times;</span>
@@ -2138,6 +2172,29 @@
             <button class="theme-option theme-uefa-champions" data-theme="uefa-champions" title="UEFA Champions League"></button>
             <button class="theme-option theme-uefa-conference" data-theme="uefa-conference" title="UEFA Conference League"></button>
         </div>
+
+        <!-- Sección Estadio -->
+        <label style="margin-top: 10px;">Estadio</label>
+        <div id="stadium-image-upload">
+            <input type="file" id="stadiumFileInput" accept="image/*">
+        </div>
+        <input type="number" id="capacityInput" placeholder="Capacidad (máx. 120.000)" min="0" max="120000" step="1000">
+
+        <!-- Sección Clima -->
+        <label>Clima</label>
+        <div class="weather-row">
+            <select id="weatherTypeSelect">
+                <option value="">-- Automático --</option>
+                <option value="Soleado">Soleado</option>
+                <option value="Nublado">Nublado</option>
+                <option value="Lluvioso">Lluvioso</option>
+            </select>
+            <select id="temperatureSelect">
+                <option value="">-- Automático --</option>
+                <!-- Opciones de -5 a 45 -->
+            </select>
+        </div>
+
         <button onclick="applySettings()">Aplicar</button>
     </div>
     <!-- Botón para volver arriba -->
@@ -2184,6 +2241,11 @@
         let useAlternateColorsAway = false;
         let teamColorsPrimary = {};
         let teamColorsAlternate = {};
+
+        // Variables para personalización de estadio y clima
+        let customStadiumImageUrl = null;
+        let customStadiumCapacity = null;
+        let customWeather = null; // { type: "Soleado", temperature: 19 }
 
         // Definición de campos con sus significados
         const headerFields = [
@@ -2683,7 +2745,7 @@
             });
         }
 
-        // Función para extraer eventos destacados del partido - MEJORADA
+        // Función mejorada para extraer eventos destacados (soporta líneas sin guión)
         function extractMatchHighlights(inputText) {
             const lines = inputText.split('\n');
             let highlights = {
@@ -2699,12 +2761,18 @@
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i].trim();
                 
-                if (!foundFirstTeam && (line.includes('- Información del partido') || 
-                                        line.includes('- Informaci n del partido') || 
-                                        line.includes('- Informacion del partido'))) {
-                    firstTeamName = line.replace('- Información del partido', '')
-                                       .replace('- Informaci n del partido', '')
-                                       .replace('- Informacion del partido', '').trim();
+                // Detectar equipo local con o sin guión
+                if (!foundFirstTeam && (line.includes('- Información del partido') || line.includes('Información del partido') || 
+                                        line.includes('- Informaci n del partido') || line.includes('Informaci n del partido') ||
+                                        line.includes('- Informacion del partido') || line.includes('Informacion del partido'))) {
+                    let teamPart = line;
+                    if (line.includes('- Información del partido')) teamPart = line.replace('- Información del partido', '');
+                    else if (line.includes('- Informaci n del partido')) teamPart = line.replace('- Informaci n del partido', '');
+                    else if (line.includes('- Informacion del partido')) teamPart = line.replace('- Informacion del partido', '');
+                    else if (line.includes('Información del partido')) teamPart = line.replace('Información del partido', '');
+                    else if (line.includes('Informaci n del partido')) teamPart = line.replace('Informaci n del partido', '');
+                    else if (line.includes('Informacion del partido')) teamPart = line.replace('Informacion del partido', '');
+                    firstTeamName = teamPart.trim();
                     foundFirstTeam = true;
                     
                     for (let j = i + 1; j < i + 8 && j < lines.length; j++) {
@@ -2741,12 +2809,18 @@
                     continue;
                 }
                 
-                if (foundFirstTeam && !foundSecondTeam && (line.includes('- Información del partido') || 
-                                                          line.includes('- Informaci n del partido') || 
-                                                          line.includes('- Informacion del partido'))) {
-                    secondTeamName = line.replace('- Información del partido', '')
-                                        .replace('- Informaci n del partido', '')
-                                        .replace('- Informacion del partido', '').trim();
+                // Detectar equipo visitante con o sin guión
+                if (foundFirstTeam && !foundSecondTeam && (line.includes('- Información del partido') || line.includes('Información del partido') ||
+                                                          line.includes('- Informaci n del partido') || line.includes('Informaci n del partido') ||
+                                                          line.includes('- Informacion del partido') || line.includes('Informacion del partido'))) {
+                    let teamPart = line;
+                    if (line.includes('- Información del partido')) teamPart = line.replace('- Información del partido', '');
+                    else if (line.includes('- Informaci n del partido')) teamPart = line.replace('- Informaci n del partido', '');
+                    else if (line.includes('- Informacion del partido')) teamPart = line.replace('- Informacion del partido', '');
+                    else if (line.includes('Información del partido')) teamPart = line.replace('Información del partido', '');
+                    else if (line.includes('Informaci n del partido')) teamPart = line.replace('Informaci n del partido', '');
+                    else if (line.includes('Informacion del partido')) teamPart = line.replace('Informacion del partido', '');
+                    secondTeamName = teamPart.trim();
                     foundSecondTeam = true;
                     
                     for (let j = i + 1; j < i + 8 && j < lines.length; j++) {
@@ -3753,21 +3827,52 @@
                     }
                 }
                 
+                updateStadiumDisplay();
+            } catch (e) {
+                console.error('Error cargando capacidades de estadios:', e);
+            }
+        }
+
+        // Función para actualizar imagen del estadio y capacidad según personalización o DB
+        function updateStadiumDisplay() {
+            const stadiumImg = document.getElementById('stadium-image');
+            const capacityDiv = document.getElementById('stadium-capacity');
+            
+            if (customStadiumImageUrl) {
+                stadiumImg.src = customStadiumImageUrl;
+            } else {
+                // Usar imagen de la base de datos si existe
+                const homeLower = homeTeamName.toLowerCase();
+                const homeStadiumUrl = stadiaDB[homeLower] || stadiaDB[homeLower.replace(/fc /g, '')] || stadiaDB[homeLower.replace(' ', '')] || null;
+                if (homeStadiumUrl) {
+                    stadiumImg.src = homeStadiumUrl;
+                } else {
+                    stadiumImg.src = ''; // vacío
+                }
+            }
+            
+            if (customStadiumCapacity !== null && !isNaN(customStadiumCapacity)) {
+                capacityDiv.textContent = `Capacidad: ${customStadiumCapacity.toLocaleString()} espectadores`;
+            } else {
                 const homeLower = homeTeamName.toLowerCase();
                 const capacity = stadiumCapacityDB[homeLower] || 
                                 stadiumCapacityDB[homeLower.replace(/fc /g, '')] || 
                                 stadiumCapacityDB[homeLower.replace(' ', '')] || 
                                 null;
                 if (capacity) {
-                    document.getElementById('stadium-capacity').textContent = `Capacidad: ${capacity} espectadores`;
+                    capacityDiv.textContent = `Capacidad: ${capacity} espectadores`;
+                } else {
+                    capacityDiv.textContent = '';
                 }
-            } catch (e) {
-                console.error('Error cargando capacidades de estadios:', e);
             }
         }
 
-        // Función para generar información meteorológica aleatoria
+        // Función para generar información meteorológica (respetando personalización)
         function generateWeatherInfo() {
+            if (customWeather && customWeather.type && customWeather.temperature !== undefined) {
+                return `${customWeather.type}, ${customWeather.temperature} °C`;
+            }
+            
             const weatherTypes = ['Soleado', 'Nublado', 'Lluvioso'];
             const probabilities = [0.6, 0.3, 0.1];
             
@@ -3843,11 +3948,6 @@
                         stadiaDB[match[1].trim().toLowerCase()] = match[2].trim();
                     }
                 });
-                const homeStadiumUrl = stadiaDB[homeLower] || stadiaDB[homeLower.replace(/fc /g, '')] || stadiaDB[homeLower.replace(' ', '')] || null;
-                if (homeStadiumUrl) {
-                    document.getElementById('stadium-image').src = homeStadiumUrl;
-                    document.getElementById('stadium-image').alt = `Estadio del ${homeTeamName}`;
-                }
                 
                 await fetchStadiumCapacity();
 
@@ -4020,6 +4120,230 @@
             }
         }
 
+        // Rellenar selector de temperatura
+        function populateTemperatureSelect() {
+            const tempSelect = document.getElementById('temperatureSelect');
+            tempSelect.innerHTML = '<option value="">-- Automático --</option>';
+            for (let t = -5; t <= 45; t++) {
+                const option = document.createElement('option');
+                option.value = t;
+                option.textContent = `${t} °C`;
+                tempSelect.appendChild(option);
+            }
+        }
+
+        // Aplicar configuración (fuente, tamaño, negrita, skip, showAlternate, tema, estadio, clima)
+        function applySettings() {
+            const fontFamily = document.getElementById('fontFamily').value;
+            const fontSize = document.getElementById('fontSize').value;
+            const boldText = document.getElementById('boldText').checked;
+            const skipCheckbox = document.getElementById('skipEmptyMinutes');
+            const showAlternateCheckbox = document.getElementById('showAlternateColorsField');
+            const prevSkip = skipEmptyMinutes;
+            
+            if (!simulationStarted) {
+                skipEmptyMinutes = skipCheckbox.checked;
+            }
+            
+            showAlternateColorsField = showAlternateCheckbox.checked;
+            
+            applyNarrationStyles();
+            toggleAlternateColorsFieldButtons();
+            
+            // Aplicar tema (ya se maneja con los botones)
+            // Los botones de tema ya tienen sus propios listeners, pero al aplicar también se guarda el tema actual
+            // (los botones ya actualizan currentTheme al hacer clic)
+            
+            // Aplicar personalización de estadio y clima
+            // Imagen
+            const fileInput = document.getElementById('stadiumFileInput');
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    customStadiumImageUrl = e.target.result;
+                    updateStadiumDisplay();
+                };
+                reader.readAsDataURL(file);
+            }
+            // Capacidad
+            const capacityInput = document.getElementById('capacityInput');
+            let capacityVal = capacityInput.value.trim();
+            if (capacityVal !== "") {
+                let num = parseInt(capacityVal, 10);
+                if (!isNaN(num)) {
+                    if (num > 120000) num = 120000;
+                    if (num < 0) num = 0;
+                    customStadiumCapacity = num;
+                } else {
+                    customStadiumCapacity = null;
+                }
+            } else {
+                customStadiumCapacity = null;
+            }
+            updateStadiumDisplay();
+            
+            // Clima
+            const weatherType = document.getElementById('weatherTypeSelect').value;
+            const temperature = document.getElementById('temperatureSelect').value;
+            if (weatherType && temperature !== "") {
+                customWeather = {
+                    type: weatherType,
+                    temperature: parseInt(temperature, 10)
+                };
+            } else {
+                customWeather = null;
+            }
+            // Actualizar clima mostrado
+            const weatherInfoDiv = document.getElementById('weather-info');
+            weatherInfoDiv.textContent = generateWeatherInfo();
+            
+            if (!simulationStarted && skipEmptyMinutes !== prevSkip) {
+                if (skipEmptyMinutes) {
+                    textarea.value = rawInput;
+                } else {
+                    textarea.value = processInput(rawInput);
+                }
+                validateAndParse();
+            }
+            closeSettingsPopup();
+        }
+
+        function processInput(input) {
+            let lines = input.split('\n');
+            let output = '';
+            let minute = 0;
+            let halfTimeCount = 0;
+            let extraTime = false;
+            let finalFound = false;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                if (line.includes('*************  FINAL  ****************')) {
+                    output += line + '\n';
+                    finalFound = true;
+                    continue;
+                }
+                
+                if (finalFound) {
+                    output += line + '\n';
+                    continue;
+                }
+                
+                if (line.includes('Minuto de juego')) {
+                    const match = line.match(/Minuto de juego (\d+)/);
+                    if (match) {
+                        const currentMinute = parseInt(match[1]);
+                        while (minute < currentMinute - 1) {
+                            minute++;
+                            output += `Minuto de juego ${minute}  :---\n`;
+                        }
+                        minute = currentMinute;
+                    }
+                    output += line + '\n';
+                } else if (line.includes('*************  media parte  ****************')) {
+                    halfTimeCount++;
+                    if (halfTimeCount === 1) {
+                        minute = 45;
+                    } else if (halfTimeCount === 2) {
+                        minute = 105;
+                    }
+                    output += line + '\n';
+                } else if (line.includes('*************  PRÓRROGA  ****************')) {
+                    minute = 90;
+                    extraTime = true;
+                    output += line + '\n';
+                } else {
+                    output += line + '\n';
+                }
+            }
+
+            return output;
+        }
+
+        // Función para scroll suave al top
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+        // Mostrar/ocultar botón de volver arriba
+        window.addEventListener('scroll', () => {
+            const button = document.getElementById('back-to-top');
+            if (window.scrollY > 300) {
+                button.classList.add('visible');
+            } else {
+                button.classList.remove('visible');
+            }
+        });
+        
+        // Inicializar visibilidad de elementos y cargar tema al cargar
+        window.addEventListener('DOMContentLoaded', function() {
+            toggleAlternateColorsFieldButtons();
+            loadSavedTheme();
+            populateTemperatureSelect();
+        });
+        
+        // Función para abrir el popup de configuración (global)
+        window.openSettingsPopup = function() {
+            const skipCheckbox = document.getElementById('skipEmptyMinutes');
+            const showAlternateCheckbox = document.getElementById('showAlternateColorsField');
+            const skipWarning = document.getElementById('skipWarning');
+            skipCheckbox.checked = skipEmptyMinutes;
+            showAlternateCheckbox.checked = showAlternateColorsField;
+            
+            updateThemeButtons();
+            
+            const themeButtons = document.querySelectorAll('.theme-option');
+            themeButtons.forEach(button => {
+                button.onclick = function(e) {
+                    e.stopPropagation();
+                    const theme = this.getAttribute('data-theme');
+                    applyTheme(theme);
+                };
+            });
+            
+            if (simulationStarted) {
+                skipCheckbox.disabled = true;
+                skipWarning.style.display = 'block';
+            } else {
+                skipCheckbox.disabled = false;
+                skipWarning.style.display = 'none';
+            }
+            
+            // Cargar valores actuales de estadio personalizado (si los hay)
+            const capacityInput = document.getElementById('capacityInput');
+            if (customStadiumCapacity !== null) {
+                capacityInput.value = customStadiumCapacity;
+            } else {
+                capacityInput.value = '';
+            }
+            // Limpiar selección de archivo
+            document.getElementById('stadiumFileInput').value = '';
+            // Cargar clima personalizado actual en los selects
+            const weatherSelect = document.getElementById('weatherTypeSelect');
+            const tempSelect = document.getElementById('temperatureSelect');
+            if (customWeather) {
+                weatherSelect.value = customWeather.type;
+                tempSelect.value = customWeather.temperature;
+            } else {
+                weatherSelect.value = '';
+                tempSelect.value = '';
+            }
+            
+            document.getElementById('settings-popup').style.display = 'block';
+            document.getElementById('settings-popup-overlay').style.display = 'block';
+        };
+        
+        window.closeSettingsPopup = function() {
+            document.getElementById('settings-popup').style.display = 'none';
+            document.getElementById('settings-popup-overlay').style.display = 'none';
+        };
+        
+        // Función para parsear y mostrar (sin cambios, pero se necesita reasignar openSettingsPopup antes)
         async function parseAndDisplay(input) {
             if (!input.trim()) {
                 return;
@@ -4658,145 +4982,24 @@
             document.getElementById('minute').textContent = 'Finalizado';
         }
 
-        // Funciones para el popup de configuración
-        function openSettingsPopup() {
-            const skipCheckbox = document.getElementById('skipEmptyMinutes');
-            const showAlternateCheckbox = document.getElementById('showAlternateColorsField');
-            const skipWarning = document.getElementById('skipWarning');
-            skipCheckbox.checked = skipEmptyMinutes;
-            showAlternateCheckbox.checked = showAlternateColorsField;
-            
-            updateThemeButtons();
-            
-            const themeButtons = document.querySelectorAll('.theme-option');
-            themeButtons.forEach(button => {
-                button.onclick = function() {
-                    const theme = this.getAttribute('data-theme');
-                    applyTheme(theme);
-                };
-            });
-            
-            if (simulationStarted) {
-                skipCheckbox.disabled = true;
-                skipWarning.style.display = 'block';
-            } else {
-                skipCheckbox.disabled = false;
-                skipWarning.style.display = 'none';
-            }
-            document.getElementById('settings-popup').style.display = 'block';
-            document.getElementById('settings-popup-overlay').style.display = 'block';
-        }
-
-        function closeSettingsPopup() {
-            document.getElementById('settings-popup').style.display = 'none';
-            document.getElementById('settings-popup-overlay').style.display = 'none';
-        }
-
-        function applySettings() {
-            const fontFamily = document.getElementById('fontFamily').value;
-            const fontSize = document.getElementById('fontSize').value;
-            const boldText = document.getElementById('boldText').checked;
-            const skipCheckbox = document.getElementById('skipEmptyMinutes');
-            const showAlternateCheckbox = document.getElementById('showAlternateColorsField');
-            const prevSkip = skipEmptyMinutes;
-            
-            if (!simulationStarted) {
-                skipEmptyMinutes = skipCheckbox.checked;
-            }
-            
-            showAlternateColorsField = showAlternateCheckbox.checked;
-            
-            applyNarrationStyles();
-            
-            toggleAlternateColorsFieldButtons();
-            
-            if (!simulationStarted && skipEmptyMinutes !== prevSkip) {
-                if (skipEmptyMinutes) {
-                    textarea.value = rawInput;
-                } else {
-                    textarea.value = processInput(rawInput);
-                }
-                validateAndParse();
-            }
-            closeSettingsPopup();
-        }
-
-        function processInput(input) {
-            let lines = input.split('\n');
-            let output = '';
-            let minute = 0;
-            let halfTimeCount = 0;
-            let extraTime = false;
-            let finalFound = false;
-
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                
-                if (line.includes('*************  FINAL  ****************')) {
-                    output += line + '\n';
-                    finalFound = true;
-                    continue;
-                }
-                
-                if (finalFound) {
-                    output += line + '\n';
-                    continue;
-                }
-                
-                if (line.includes('Minuto de juego')) {
-                    const match = line.match(/Minuto de juego (\d+)/);
-                    if (match) {
-                        const currentMinute = parseInt(match[1]);
-                        while (minute < currentMinute - 1) {
-                            minute++;
-                            output += `Minuto de juego ${minute}  :---\n`;
-                        }
-                        minute = currentMinute;
-                    }
-                    output += line + '\n';
-                } else if (line.includes('*************  media parte  ****************')) {
-                    halfTimeCount++;
-                    if (halfTimeCount === 1) {
-                        minute = 45;
-                    } else if (halfTimeCount === 2) {
-                        minute = 105;
-                    }
-                    output += line + '\n';
-                } else if (line.includes('*************  PRÓRROGA  ****************')) {
-                    minute = 90;
-                    extraTime = true;
-                    output += line + '\n';
-                } else {
-                    output += line + '\n';
-                }
-            }
-
-            return output;
-        }
-
-        // Función para scroll suave al top
-        function scrollToTop() {
-            window.scrollTo({
-                top: 0,
-                behavior: 'smooth'
-            });
-        }
-
-        // Mostrar/ocultar botón de volver arriba
-        window.addEventListener('scroll', () => {
-            const button = document.getElementById('back-to-top');
-            if (window.scrollY > 300) {
-                button.classList.add('visible');
-            } else {
-                button.classList.remove('visible');
-            }
-        });
-        
-        // Inicializar visibilidad de elementos y cargar tema al cargar
-        window.addEventListener('DOMContentLoaded', function() {
-            toggleAlternateColorsFieldButtons();
-            loadSavedTheme();
-        });
+        // Exponer funciones globales
+        window.switchTab = switchTab;
+        window.pasteFromClipboard = pasteFromClipboard;
+        window.toggleInput = toggleInput;
+        window.startSimulation = startSimulation;
+        window.togglePause = togglePause;
+        window.resetSimulation = resetSimulation;
+        window.fastForwardToEnd = fastForwardToEnd;
+        window.showFieldModal = showFieldModal;
+        window.closeFieldModal = closeFieldModal;
+        window.closePlayerPopup = closePlayerPopup;
+        window.showGoalPopup = showGoalPopup;
+        window.closeGoalPopup = closeGoalPopup;
+        window.filterEvents = filterEvents;
+        window.toggleAlternateColors = toggleAlternateColors;
+        window.applySettings = applySettings;
+        window.scrollToTop = scrollToTop;
+        // showNextLine se definirá en startSimulation
     </script>
 </body>
 </html>
