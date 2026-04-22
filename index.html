@@ -33,7 +33,7 @@
             transition: all 0.3s ease;
         }
         
-        /* Estilos para los temas */
+        /* Estilos para los temas (sin cambios) */
         body.theme-uefa-europa {
             background: linear-gradient(135deg, #ff7b00 0%, #ff9500 50%, #ffaa00 100%);
             color: #1a1a1a;
@@ -356,7 +356,7 @@
         }
 
         .container {
-            max-width: 900px;
+            max-width: 950px;
             margin: 0 auto;
             background: linear-gradient(180deg, #1e1e30 0%, #252538 100%);
             padding: 30px;
@@ -703,6 +703,7 @@
             align-self: center;
         }
 
+        /* Estilos para la vista de alineaciones por defecto (vertical) */
         #lineups {
             display: flex;
             justify-content: space-between;
@@ -802,6 +803,14 @@
             vertical-align: middle;
             border: 1px solid #444;
         }
+        .captain-icon {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            margin-left: 6px;
+            vertical-align: middle;
+            cursor: help;
+        }
         #speed-control {
             margin: 0;
         }
@@ -862,6 +871,17 @@
             text-align: left;
             font-weight: bold;
             color: #b8b8d1;
+        }
+        /* Resaltado de celdas con mejor valor */
+        .best-value-cell {
+            background: rgba(40, 167, 69, 0.4);
+            font-weight: bold;
+            box-shadow: inset 0 0 0 1px #28a745;
+        }
+        .worst-value-cell {
+            background: rgba(220, 53, 69, 0.4);
+            font-weight: bold;
+            box-shadow: inset 0 0 0 1px #dc3545;
         }
 
         /* Estilos para el popup de jugador */
@@ -971,6 +991,15 @@
         }
         .player-popup .player-header .player-details p {
             margin: 5px 0;
+        }
+        /* Fecha de actualización */
+        .player-popup .update-date {
+            margin-top: 15px;
+            font-size: 10px;
+            text-align: right;
+            color: #888;
+            border-top: 1px solid #3a3a4e;
+            padding-top: 8px;
         }
 
         /* Estilos para el modal del campo - CORREGIDO */
@@ -1570,6 +1599,8 @@
         .right-column {
             display: flex;
             flex-direction: column;
+            align-items: flex-end;
+            width: 180px;
         }
         #stadium-container {
             display: flex;
@@ -1902,6 +1933,10 @@
         /* Estilos para el campo de carga de imagen del estadio */
         #stadium-image-upload {
             margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
         }
         #stadium-image-upload input {
             background: #2a2a3e;
@@ -1909,18 +1944,44 @@
             border-radius: 5px;
             padding: 6px;
             color: #e0e0e0;
-            width: 100%;
-            box-sizing: border-box;
+            flex: 1;
         }
-        #capacity-input {
-            width: 100%;
+        .remove-stadium-btn {
+            background: #dc3545;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            width: 30px;
+            height: 30px;
+            font-size: 16px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+        .remove-stadium-btn:hover {
+            background: #c82333;
+        }
+        .capacity-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .capacity-wrapper label {
+            margin: 0;
+            white-space: nowrap;
+        }
+        #capacityInput {
+            flex: 1;
             padding: 8px;
             border: 2px solid #533d7d;
             border-radius: 5px;
             background: #2a2a3e;
             color: #e0e0e0;
             font-size: 14px;
-            margin-bottom: 15px;
             box-sizing: border-box;
         }
         .weather-row {
@@ -1931,6 +1992,187 @@
         .weather-row select {
             flex: 1;
             margin-bottom: 0;
+        }
+
+        /* Estilos para la vista de alineaciones tipo campo (visual) - MODIFICADOS: círculos más pequeños, sin texto extra, mayor separación */
+        .pitch-visual-container {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: nowrap;
+        }
+        .pitch-side {
+            flex: 1;
+            min-width: 380px;
+            max-width: 520px;
+            background: #1a7a3a;
+            background-image: radial-gradient(circle at 10% 20%, rgba(255,255,255,0.1) 1%, transparent 1%);
+            background-size: 12px 12px;
+            border-radius: 20px;
+            padding: 16px 12px;
+            border: 2px solid white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            position: relative;
+            margin: 0 auto;
+        }
+        /* Eliminamos los textos de equipo, formación y manager */
+        .pitch-side h3, .pitch-side .formation, .pitch-side .manager-vis {
+            display: none;
+        }
+        .pitch-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 280px;
+        }
+        .pitch-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: nowrap;
+            gap: 20px; /* Separación aumentada para dar más espacio */
+            min-height: 65px;
+        }
+        .player-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 60px;
+        }
+        .player-circle-vis {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background-size: cover;
+            background-position: center;
+            background-color: #f3f4f6;
+            border: 2px solid #fbbf24;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transition: 0.1s;
+            cursor: pointer;
+        }
+        .player-circle-vis.gk { border-color: #ef4444; }
+        .player-circle-vis.df { border-color: #3b82f6; }
+        .player-circle-vis.dm { border-color: #8b5cf6; }
+        .player-circle-vis.mf { border-color: #10b981; }
+        .player-circle-vis.am { border-color: #f59e0b; }
+        .player-circle-vis.fw { border-color: #ec489a; }
+        .player-info-vis {
+            margin-top: 4px;
+            font-size: 9px;
+            font-weight: bold;
+            text-align: center;
+            color: white;
+            background: rgba(0,0,0,0.6);
+            padding: 2px 4px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            white-space: nowrap;
+        }
+        .player-flag-vis {
+            width: 14px;
+            height: 10px;
+            display: inline-block;
+            background-size: cover;
+            border-radius: 2px;
+        }
+        /* Suplentes con el mismo estilo que titulares */
+        .substitutes-container {
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.3);
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+        }
+        .substitute-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 60px;
+        }
+        @media (max-width: 900px) {
+            .pitch-visual-container {
+                flex-wrap: wrap;
+            }
+            .pitch-side {
+                min-width: 100%;
+                max-width: 100%;
+            }
+        }
+        @media (max-width: 768px) {
+            .pitch-side { min-width: 280px; }
+            .player-card { width: 55px; }
+            .player-circle-vis { width: 40px; height: 40px; }
+            .player-info-vis { font-size: 8px; padding: 1px 3px; }
+            .pitch-row { gap: 15px; }
+            .substitute-card { width: 55px; }
+        }
+        /* Estilo para el selector de árbitro y capitanes */
+        .referee-selector, .captains-selector {
+            margin-bottom: 20px;
+        }
+        .referee-selector select, .captains-selector select {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .referee-random-btn {
+            width: 100%;
+            background: #6c757d;
+            border-color: #adb5bd;
+        }
+        .referee-random-btn:hover {
+            background: #5a6268;
+        }
+        .captain-group {
+            margin-bottom: 15px;
+        }
+        .captain-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+        /* Checkbox para destacar mejores estadísticas */
+        .stats-highlight-container {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 8px;
+        }
+        .stats-highlight-container input {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #533d7d;
+            border-radius: 50%;
+            background: #2a2a3e;
+            cursor: pointer;
+            position: relative;
+        }
+        .stats-highlight-container input:checked {
+            background: #7b2cbf;
+            border-color: #9d4edd;
+        }
+        .stats-highlight-container input:checked::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .stats-highlight-container label {
+            cursor: pointer;
+            user-select: none;
+            font-size: 13px;
+            color: #b8b8d1;
         }
     </style>
 </head>
@@ -1946,7 +2188,7 @@
                 <span id="pasteIcon" onclick="pasteFromClipboard()" title="Pegar del portapapeles" style="cursor: pointer; font-size: 18px;">📋</span>
             </div>
             <div id="inputContainer">
-                <textarea id="input" placeholder="Ejemplo: UEFA Champions League , Real Madrid vs. FC Bayern Munich (Sun Oct 26)..."></textarea>
+                <textarea id="input" placeholder="Ejemplo: UEFA Champions League, Real Madrid vs. FC Bayern Munich (Sun Oct 26)..."></textarea>
             </div>
         </div>
         <div id="output">
@@ -2020,6 +2262,10 @@
             <div id="stats-tab" class="tab-content">
                 <div id="stats-message">Estadísticas no disponibles hasta el final del partido</div>
                 <div id="stats-content">
+                    <div class="stats-highlight-container">
+                        <input type="checkbox" id="highlightBestStats" onchange="highlightStatsCells()">
+                        <label for="highlightBestStats">Destacar mejores valores</label>
+                    </div>
                     <table class="stats-table">
                         <thead>
                             <tr>
@@ -2111,7 +2357,7 @@
     <div id="field-modal" class="field-modal">
         <div class="field-modal-content">
             <span class="close" onclick="closeFieldModal()">&times;</span>
-            <h3>Vista del Campo</h3>
+            <h3>Vista del campo</h3>
             <div id="fieldVisualization">
                 <div id="fieldContainer">
                     <!-- Las 6 secciones del campo se insertarán aquí dinámicamente -->
@@ -2173,12 +2419,54 @@
             <button class="theme-option theme-uefa-conference" data-theme="uefa-conference" title="UEFA Conference League"></button>
         </div>
 
+        <!-- Nueva sección Tipo de campo -->
+        <label style="margin-top: 10px;">Tipo de campo</label>
+        <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+            <label style="display: flex; align-items: center; gap: 5px; font-weight: normal;">
+                <input type="radio" name="lineupViewMode" value="default" checked> Por defecto
+            </label>
+            <label style="display: flex; align-items: center; gap: 5px; font-weight: normal;">
+                <input type="radio" name="lineupViewMode" value="visual"> Visual
+            </label>
+        </div>
+
+        <!-- Nueva sección Capitanes -->
+        <label>Capitanes</label>
+        <div class="captains-selector">
+            <div class="captain-group">
+                <label> Capitán del equipo local:</label>
+                <select id="homeCaptainSelect">
+                    <option value="">-- Ninguno --</option>
+                </select>
+            </div>
+            <div class="captain-group">
+                <label> Capitán del equipo visitante:</label>
+                <select id="awayCaptainSelect">
+                    <option value="">-- Ninguno --</option>
+                </select>
+            </div>
+        </div>
+
         <!-- Sección Estadio -->
-        <label style="margin-top: 10px;">Estadio</label>
+        <label>Estadio</label>
         <div id="stadium-image-upload">
             <input type="file" id="stadiumFileInput" accept="image/*">
+            <button class="remove-stadium-btn" id="removeStadiumBtn" title="Eliminar imagen personalizada">✖</button>
         </div>
-        <input type="number" id="capacityInput" placeholder="Capacidad (máx. 120.000)" min="0" max="120000" step="1000">
+        <div class="capacity-wrapper">
+            <label>Capacidad:</label>
+            <input type="number" id="capacityInput" placeholder="0" min="0" max="120000" step="1000">
+            <span>espectadores</span>
+        </div>
+
+        <!-- Sección Árbitro -->
+        <label>Árbitro</label>
+        <div class="referee-selector">
+            <select id="refereeSelect">
+                <option value="">-- Seleccionar árbitro --</option>
+            </select>
+            <button id="randomRefereeBtn" class="referee-random-btn" onclick="selectRandomReferee()">Elegir al azar</button>
+        </div>
 
         <!-- Sección Clima -->
         <label>Clima</label>
@@ -2235,6 +2523,8 @@
         let badgesDB = {};
         let stadiaDB = {};
         let stadiumCapacityDB = {};
+        let refereesDB = []; // array de { name, nationality }
+        let lastUpdateDate = ''; // fecha de última actualización de la base de datos de jugadores
         
         // Nuevas variables para manejar colores suplentes
         let useAlternateColorsHome = false;
@@ -2246,6 +2536,14 @@
         let customStadiumImageUrl = null;
         let customStadiumCapacity = null;
         let customWeather = null; // { type: "Soleado", temperature: 19 }
+        let customReferee = null; // { name: "Slavko_Vincic", nationality: "svn" }
+
+        // Capitanes
+        let homeCaptain = null;   // nombre original (con guiones bajos)
+        let awayCaptain = null;
+
+        // Variable para el modo de visualización de alineaciones
+        let visualLineupsMode = false; // false = por defecto, true = visual
 
         // Definición de campos con sus significados
         const headerFields = [
@@ -2300,7 +2598,12 @@
             document.getElementById(tabId).classList.add('active');
             event.target.classList.add('active');
 
-            if (tabId === 'stats-tab') {
+            if (tabId === 'lineups-tab') {
+                // Re-renderizar alineaciones según el modo actual
+                if (window.homeLineupStarters && window.awayLineupStarters) {
+                    renderLineups();
+                }
+            } else if (tabId === 'stats-tab') {
                 if (matchFinished && matchStats) {
                     displayMatchStats();
                 } else {
@@ -2355,15 +2658,74 @@
                     awayValue += '%';
                 }
                 const row = document.createElement('tr');
+                row.setAttribute('data-stat-name', stat.name);
+                const homeTd = document.createElement('td');
+                homeTd.textContent = homeValue;
+                const awayTd = document.createElement('td');
+                awayTd.textContent = awayValue;
                 row.innerHTML = `
                     <td class="stat-name">${stat.name}</td>
-                    <td>${homeValue}</td>
-                    <td>${awayValue}</td>
                 `;
+                row.appendChild(homeTd);
+                row.appendChild(awayTd);
+                // Guardar valores numéricos para comparar después
+                row.setAttribute('data-home-num', stat.home);
+                row.setAttribute('data-away-num', stat.away);
                 statsBody.appendChild(row);
             });
+            // Aplicar resaltado si el checkbox está activo
+            highlightStatsCells();
         }
         
+        // Función para resaltar celdas con mejor valor (mayor o menor según estadística)
+        function highlightStatsCells() {
+            const highlightCheck = document.getElementById('highlightBestStats');
+            if (!highlightCheck) return;
+            const shouldHighlight = highlightCheck.checked;
+            const rows = document.querySelectorAll('#stats-body tr');
+            // Primero limpiar clases existentes
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                cells.forEach(cell => {
+                    cell.classList.remove('best-value-cell', 'worst-value-cell');
+                });
+            });
+            if (!shouldHighlight) return;
+            
+            rows.forEach(row => {
+                const statName = row.getAttribute('data-stat-name');
+                // Estadísticas excluidas: Cambios
+                if (statName === 'Cambios') return;
+                
+                let homeVal = parseFloat(row.getAttribute('data-home-num'));
+                let awayVal = parseFloat(row.getAttribute('data-away-num'));
+                if (isNaN(homeVal)) homeVal = 0;
+                if (isNaN(awayVal)) awayVal = 0;
+                
+                const isLowerBetter = (statName === 'Rojas' || statName === 'Amarillas' || statName === 'Faltas');
+                const homeCell = row.cells[1];
+                const awayCell = row.cells[2];
+                
+                if (isLowerBetter) {
+                    // Destacar el menor valor
+                    if (homeVal < awayVal) {
+                        homeCell.classList.add('best-value-cell');
+                    } else if (awayVal < homeVal) {
+                        awayCell.classList.add('best-value-cell');
+                    } else if (homeVal === awayVal && homeVal !== 0) {
+                        // Si son iguales y no cero, ambas son mejores? No destacar ninguna para evitar ruido
+                    }
+                } else {
+                    // Destacar el mayor valor
+                    if (homeVal > awayVal) {
+                        homeCell.classList.add('best-value-cell');
+                    } else if (awayVal > homeVal) {
+                        awayCell.classList.add('best-value-cell');
+                    }
+                }
+            });
+        }
+
         // Función para extraer estadísticas del partido - MEJORADA
         function extractMatchStats() {
             const inputText = originalNarrationText;
@@ -3136,7 +3498,7 @@
             const iconUrl = getEventIcon(event.type);
             
             const playerData = findPlayerByName(event.player);
-            const faceUrl = playerData && facesDB[playerData.Name] ? facesDB[playerData.Name] : 'https://2img.net/i.imgur.com/7Y9zAkb.png';
+            const faceUrl = playerData && facesDB[playerData.Name] ? facesDB[playerData.Name] : (facesDB['Unknown'] || 'https://2img.net/i.imgur.com/7Y9zAkb.png');
             
             const eventDiv = document.createElement('div');
             eventDiv.className = `timeline-event ${event.team === 'home' ? 'left' : 'right'}`;
@@ -3235,7 +3597,7 @@
             await fetchBadgesAndStadia();
         }
         
-        // Función para cargar la base de datos de jugadores
+        // Función para cargar la base de datos de jugadores (incluyendo fecha de actualización)
         async function fetchPlayerDatabase() {
             try {
                 const response = await fetch('https://www.tusoccermanager.com/h85-playerdb-html');
@@ -3245,6 +3607,15 @@
                 const pre = doc.querySelector('pre');
                 const content = pre ? pre.textContent : text;
                 const lines = content.split('\n');
+
+                // Extraer fecha de actualización (última línea no vacía)
+                for (let i = lines.length - 1; i >= 0; i--) {
+                    const trimmed = lines[i].trim();
+                    if (trimmed && /^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+                        lastUpdateDate = trimmed;
+                        break;
+                    }
+                }
 
                 let i = 0;
                 let teamsList = [];
@@ -3341,11 +3712,88 @@
                         facesDB[match[1]] = match[2].trim();
                     }
                 }
+                // Asegurar que existe Unknown
+                if (!facesDB['Unknown']) {
+                    facesDB['Unknown'] = 'https://2img.net/i.imgur.com/7Y9zAkb.png';
+                }
             } catch (error) {
                 console.error('Error cargando las caras:', error);
+                facesDB['Unknown'] = 'https://2img.net/i.imgur.com/7Y9zAkb.png';
             }
         }
         
+        // Función para cargar la base de datos de árbitros
+        async function fetchReferees() {
+            try {
+                const response = await fetch('https://www.tusoccermanager.com/h136-refereedb-html');
+                const text = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                const pre = doc.querySelector('pre');
+                const content = pre ? pre.textContent : text;
+                const lines = content.split('\n');
+                refereesDB = [];
+                // Buscar la línea que contiene la tabla (después de la línea de guiones)
+                let start = false;
+                for (let line of lines) {
+                    line = line.trim();
+                    if (line.includes('-------')) {
+                        start = true;
+                        continue;
+                    }
+                    if (!start || line === '') continue;
+                    // Formato: nombre(s) con guiones bajos, luego número, luego código país, luego número
+                    const parts = line.split(/\s+/);
+                    if (parts.length >= 4) {
+                        const name = parts[0];
+                        const nationality = parts[2];
+                        refereesDB.push({ name: name, nationality: nationality });
+                    }
+                }
+                // Ordenar alfabéticamente por nombre
+                refereesDB.sort((a, b) => a.name.localeCompare(b.name));
+                // Llenar el select
+                const select = document.getElementById('refereeSelect');
+                select.innerHTML = '<option value="">-- Seleccionar árbitro --</option>';
+                refereesDB.forEach(ref => {
+                    const option = document.createElement('option');
+                    option.value = ref.name;
+                    option.textContent = `${formatPlayerName(ref.name)} (${ref.nationality.toUpperCase()})`;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error cargando árbitros:', error);
+            }
+        }
+
+        // Función para seleccionar árbitro al azar
+        function selectRandomReferee() {
+            if (refereesDB.length === 0) {
+                alert('No hay árbitros disponibles. Intenta recargar la página.');
+                return;
+            }
+            const randomIndex = Math.floor(Math.random() * refereesDB.length);
+            const ref = refereesDB[randomIndex];
+            customReferee = { name: ref.name, nationality: ref.nationality };
+            // Actualizar el select
+            const select = document.getElementById('refereeSelect');
+            select.value = ref.name;
+            // Actualizar la visualización del árbitro si ya hay un partido cargado
+            updateRefereeDisplay();
+        }
+
+        // Actualizar la visualización del árbitro en la interfaz
+        function updateRefereeDisplay() {
+            const refereeInfoDiv = document.getElementById('referee-info');
+            if (customReferee && customReferee.name) {
+                const formattedName = formatPlayerName(customReferee.name);
+                refereeInfoDiv.innerHTML = `Árbitro: ${formattedName} (${customReferee.nationality.toUpperCase()})`;
+            } else {
+                // Si no hay personalizado, se mantendrá el original (se establece al parsear)
+                // No hacer nada
+            }
+        }
+
         // Función para cargar colores titulares
         async function fetchPrimaryColors() {
             try {
@@ -3497,7 +3945,7 @@
             return null;
         }
         
-        // Función para mostrar el popup del jugador
+        // Función para mostrar el popup del jugador (incluye fecha de actualización)
         function showPlayerPopup(player) {
             const popup = document.getElementById('player-popup');
             const overlay = document.getElementById('player-popup-overlay');
@@ -3506,7 +3954,7 @@
             const flagCode = player.Nat ? player.Nat.toLowerCase() : '';
             const flagUrl = flagsDB[flagCode] || '';
 
-            const faceUrl = facesDB[player.Name] || 'https://2img.net/i.imgur.com/7Y9zAkb.png';
+            const faceUrl = facesDB[player.Name] || facesDB['Unknown'] || 'https://2img.net/i.imgur.com/7Y9zAkb.png';
 
             const formattedName = formatPlayerName(player.Name);
 
@@ -3572,6 +4020,7 @@
                 <div class="stats">
                     ${statsHTML}
                 </div>
+                <div class="update-date">Última actualización: ${lastUpdateDate || 'desconocida'}</div>
             `;
 
             popup.style.display = 'block';
@@ -3953,6 +4402,9 @@
 
                 const weatherInfo = document.getElementById('weather-info');
                 weatherInfo.textContent = generateWeatherInfo();
+                
+                // Aplicar árbitro personalizado si existe
+                updateRefereeDisplay();
             } catch (e) {
                 console.error(e);
             }
@@ -4132,7 +4584,326 @@
             }
         }
 
-        // Aplicar configuración (fuente, tamaño, negrita, skip, showAlternate, tema, estadio, clima)
+        // Poblar los selects de capitanes
+        function populateCaptainSelects() {
+            const homeSelect = document.getElementById('homeCaptainSelect');
+            const awaySelect = document.getElementById('awayCaptainSelect');
+            if (!homeSelect || !awaySelect) return;
+            
+            // Obtener todos los jugadores de cada equipo (titulares + suplentes)
+            const homePlayers = [];
+            const awayPlayers = [];
+            if (window.homeLineupStarters) {
+                window.homeLineupStarters.forEach(p => homePlayers.push(p.name));
+            }
+            if (window.homeLineupSubs) {
+                window.homeLineupSubs.forEach(p => homePlayers.push(p.name));
+            }
+            if (window.awayLineupStarters) {
+                window.awayLineupStarters.forEach(p => awayPlayers.push(p.name));
+            }
+            if (window.awayLineupSubs) {
+                window.awayLineupSubs.forEach(p => awayPlayers.push(p.name));
+            }
+            
+            homeSelect.innerHTML = '<option value="">-- Ninguno --</option>';
+            homePlayers.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = formatPlayerName(name);
+                homeSelect.appendChild(option);
+            });
+            if (homeCaptain && homePlayers.includes(homeCaptain)) homeSelect.value = homeCaptain;
+            
+            awaySelect.innerHTML = '<option value="">-- Ninguno --</option>';
+            awayPlayers.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = formatPlayerName(name);
+                awaySelect.appendChild(option);
+            });
+            if (awayCaptain && awayPlayers.includes(awayCaptain)) awaySelect.value = awayCaptain;
+        }
+
+        // Nuevo icono de capitán (imagen)
+        function getCaptainIcon() {
+            return `<img src="https://2img.net/i.imgur.com/VXKMXuJ.png" class="captain-icon" style="width:14px; height:14px; vertical-align: middle; margin-left: 6px;" title="Capitán">`;
+        }
+
+        // Función para renderizar alineaciones según el modo actual (MEJORADA: ancho equilibrado, separación mejorada, capitán con imagen, click en cualquier jugador)
+        function renderLineups() {
+            const lineupsDiv = document.getElementById('lineups');
+            if (!window.homeLineupStarters || !window.awayLineupStarters) return;
+            
+            // Actualizar los selects de capitanes por si acaso
+            populateCaptainSelects();
+            
+            if (visualLineupsMode) {
+                // Modo visual: mostrar campo con dos mitades, suplentes dentro del contenedor
+                const homeStarters = window.homeLineupStarters;
+                const awayStarters = window.awayLineupStarters;
+                const homeSubs = window.homeLineupSubs || [];
+                const awaySubs = window.awayLineupSubs || [];
+                const order = ['GK', 'DF', 'DM', 'MF', 'AM', 'FW'];
+                
+                // Función para agrupar jugadores por posición
+                const groupByPosition = (players) => {
+                    const groups = { GK: [], DF: [], DM: [], MF: [], AM: [], FW: [] };
+                    players.forEach(p => {
+                        if (groups[p.position]) groups[p.position].push(p);
+                    });
+                    return groups;
+                };
+                
+                const homeGroups = groupByPosition(homeStarters);
+                const awayGroups = groupByPosition(awayStarters);
+                
+                // Función para obtener la URL de la cara (con fallback a Unknown)
+                function getPlayerFaceUrl(playerName) {
+                    const playerData = findPlayerByName(playerName);
+                    if (playerData && facesDB[playerData.Name]) {
+                        return facesDB[playerData.Name];
+                    }
+                    return facesDB['Unknown'] || 'https://2img.net/i.imgur.com/7Y9zAkb.png';
+                }
+                
+                // Obtener bandera de un jugador
+                function getPlayerFlagUrl(playerName) {
+                    const playerData = findPlayerByName(playerName);
+                    if (playerData && playerData.Nat) {
+                        const code = playerData.Nat.toLowerCase();
+                        return flagsDB[code] || '';
+                    }
+                    return '';
+                }
+                
+                // Generar filas para un equipo (con espacio reservado para todas las posiciones)
+                const generateRows = (groups, teamSide) => {
+                    let rowsHtml = '';
+                    order.forEach(pos => {
+                        const players = groups[pos];
+                        rowsHtml += `<div class="pitch-row">`;
+                        if (players.length === 0) {
+                            rowsHtml += `<div class="player-card" style="opacity:0; pointer-events:none;"><div class="player-circle-vis" style="background-color:transparent; border-color:transparent;"></div><div class="player-info-vis" style="visibility:hidden;">---</div></div>`;
+                        } else {
+                            players.forEach(player => {
+                                const faceUrl = getPlayerFaceUrl(player.name);
+                                const flagUrl = getPlayerFlagUrl(player.name);
+                                const formattedName = formatPlayerName(player.name);
+                                const isCaptain = (teamSide === 'home' && homeCaptain === player.name) || (teamSide === 'away' && awayCaptain === player.name);
+                                rowsHtml += `
+                                    <div class="player-card">
+                                        <div class="player-circle-vis ${player.position.toLowerCase()}" style="background-image: url('${faceUrl}'); background-size: cover; background-position: center;" title="${player.position} - ${formattedName}" onclick="showPlayerPopupById('${player.name}')"></div>
+                                        <div class="player-info-vis">
+                                            ${flagUrl ? `<div class="player-flag-vis" style="background-image: url('${flagUrl}'); background-size: cover;"></div>` : ''}
+                                            <span>${formattedName}</span>
+                                            ${isCaptain ? getCaptainIcon() : ''}
+                                        </div>
+                                    </div>
+                                `;
+                            });
+                        }
+                        rowsHtml += `</div>`;
+                    });
+                    return rowsHtml;
+                };
+                
+                // Generar HTML para los suplentes (con el mismo estilo que titulares)
+                const generateSubstitutes = (subs, teamSide) => {
+                    if (subs.length === 0) return '';
+                    let subsHtml = `<div class="substitutes-container">`;
+                    subs.forEach(sub => {
+                        const faceUrl = getPlayerFaceUrl(sub.name);
+                        const flagUrl = getPlayerFlagUrl(sub.name);
+                        const formattedName = formatPlayerName(sub.name);
+                        const isCaptain = (teamSide === 'home' && homeCaptain === sub.name) || (teamSide === 'away' && awayCaptain === sub.name);
+                        subsHtml += `
+                            <div class="substitute-card">
+                                <div class="player-circle-vis ${sub.position.toLowerCase()}" style="background-image: url('${faceUrl}'); background-size: cover; background-position: center;" onclick="showPlayerPopupById('${sub.name}')"></div>
+                                <div class="player-info-vis">
+                                    ${flagUrl ? `<div class="player-flag-vis" style="background-image: url('${flagUrl}'); background-size: cover;"></div>` : ''}
+                                    <span>${formattedName}</span>
+                                    ${isCaptain ? getCaptainIcon() : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    subsHtml += `</div>`;
+                    return subsHtml;
+                };
+                
+                const homeRows = generateRows(homeGroups, 'home');
+                const awayRows = generateRows(awayGroups, 'away');
+                const homeSubsHtml = generateSubstitutes(homeSubs, 'home');
+                const awaySubsHtml = generateSubstitutes(awaySubs, 'away');
+                
+                lineupsDiv.innerHTML = `
+                    <div class="pitch-visual-container">
+                        <div class="pitch-side">
+                            <div class="pitch-grid">
+                                ${homeRows}
+                            </div>
+                            ${homeSubsHtml}
+                        </div>
+                        <div class="pitch-side">
+                            <div class="pitch-grid">
+                                ${awayRows}
+                            </div>
+                            ${awaySubsHtml}
+                        </div>
+                    </div>
+                `;
+                
+                // Añadir evento para mostrar popup del jugador por nombre
+                window.showPlayerPopupById = function(playerName) {
+                    const playerData = findPlayerByName(playerName);
+                    if (playerData) showPlayerPopup(playerData);
+                    else alert(`No se encontraron datos para ${playerName}`);
+                };
+            } else {
+                // Modo por defecto: usar el HTML guardado originalmente, añadiendo icono de capitán y click en todos los li
+                const homeStartersData = window.homeStartersData || [];
+                const awayStartersData = window.awayStartersData || [];
+                const homeSubsData = window.homeSubsData || [];
+                const awaySubsData = window.awaySubsData || [];
+                const homeFormation = window.homeFormation || '';
+                const awayFormation = window.awayFormation || '';
+                const homeManager = window.homeManager || '';
+                const awayManager = window.awayManager || '';
+                const homeKeyPlayers = window.homeKeyPlayers || { topScorer: null, topAssister: null, star: null };
+                const awayKeyPlayers = window.awayKeyPlayers || { topScorer: null, topAssister: null, star: null };
+                
+                // Función para reconstruir lista con eventos click
+                function rebuildPlayerList(playersData, teamSide) {
+                    const ul = document.createElement('ul');
+                    ul.className = 'starters';
+                    playersData.forEach(p => {
+                        const li = p.element.cloneNode(true);
+                        // Asegurar evento click
+                        if (p.player) {
+                            li.onclick = function(e) {
+                                e.stopPropagation();
+                                showPlayerPopup(p.player);
+                            };
+                        } else {
+                            // Si no hay datos, intentar buscar
+                            const playerData = findPlayerByName(p.name);
+                            if (playerData) {
+                                li.onclick = function(e) {
+                                    e.stopPropagation();
+                                    showPlayerPopup(playerData);
+                                };
+                            }
+                        }
+                        const playerNameSpan = li.querySelector('.player-name') || li;
+                        const playerName = p.name;
+                        const isCaptain = (teamSide === 'home' && homeCaptain === playerName) || (teamSide === 'away' && awayCaptain === playerName);
+                        if (isCaptain && !li.querySelector('.captain-icon')) {
+                            const iconSpan = document.createElement('span');
+                            iconSpan.innerHTML = getCaptainIcon();
+                            playerNameSpan.appendChild(iconSpan);
+                        }
+                        ul.appendChild(li);
+                    });
+                    return ul;
+                }
+                
+                function rebuildSubsList(subsData, teamSide) {
+                    const ul = document.createElement('ul');
+                    ul.className = 'subs';
+                    subsData.forEach(p => {
+                        const li = p.element.cloneNode(true);
+                        if (p.player) {
+                            li.onclick = function(e) {
+                                e.stopPropagation();
+                                showPlayerPopup(p.player);
+                            };
+                        } else {
+                            const playerData = findPlayerByName(p.name);
+                            if (playerData) {
+                                li.onclick = function(e) {
+                                    e.stopPropagation();
+                                    showPlayerPopup(playerData);
+                                };
+                            }
+                        }
+                        const playerNameSpan = li.querySelector('.player-name') || li;
+                        const playerName = p.name;
+                        const isCaptain = (teamSide === 'home' && homeCaptain === playerName) || (teamSide === 'away' && awayCaptain === playerName);
+                        if (isCaptain && !li.querySelector('.captain-icon')) {
+                            const iconSpan = document.createElement('span');
+                            iconSpan.innerHTML = getCaptainIcon();
+                            playerNameSpan.appendChild(iconSpan);
+                        }
+                        ul.appendChild(li);
+                    });
+                    return ul;
+                }
+                
+                lineupsDiv.innerHTML = `
+                    <div class="team-section">
+                        <div class="formation">${homeFormation}</div>
+                        <div class="manager">${homeManager}</div>
+                        <div class="lineup-titles">
+                            <h4>Titulares</h4>
+                            <h4 class="right-align">Suplentes</h4>
+                        </div>
+                        <div class="lineup-container">
+                            <div class="starters-placeholder"></div>
+                            <div class="right-column">
+                                <div class="subs-placeholder"></div>
+                                <button class="view-field-btn" onclick="showFieldModal('home')">Ver campo</button>
+                                <div class="key-players">
+                                    <h4 class="right-align">Jugadores clave</h4>
+                                    <ul>
+                                        <li>Máximo artillero: ${homeKeyPlayers.topScorer ? formatPlayerName(homeKeyPlayers.topScorer.Name) : 'N/A'}</li>
+                                        <li>Máximo asistente: ${homeKeyPlayers.topAssister ? formatPlayerName(homeKeyPlayers.topAssister.Name) : 'N/A'}</li>
+                                        <li>La estrella: ${homeKeyPlayers.star ? formatPlayerName(homeKeyPlayers.star.Name) : 'N/A'}</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="team-section">
+                        <div class="formation">${awayFormation}</div>
+                        <div class="manager">${awayManager}</div>
+                        <div class="lineup-titles">
+                            <h4>Titulares</h4>
+                            <h4 class="right-align">Suplentes</h4>
+                        </div>
+                        <div class="lineup-container">
+                            <div class="starters-placeholder"></div>
+                            <div class="right-column">
+                                <div class="subs-placeholder"></div>
+                                <button class="view-field-btn" onclick="showFieldModal('away')">Ver campo</button>
+                                <div class="key-players">
+                                    <h4 class="right-align">Jugadores clave</h4>
+                                    <ul>
+                                        <li>Máximo artillero: ${awayKeyPlayers.topScorer ? formatPlayerName(awayKeyPlayers.topScorer.Name) : 'N/A'}</li>
+                                        <li>Máximo asistente: ${awayKeyPlayers.topAssister ? formatPlayerName(awayKeyPlayers.topAssister.Name) : 'N/A'}</li>
+                                        <li>La estrella: ${awayKeyPlayers.star ? formatPlayerName(awayKeyPlayers.star.Name) : 'N/A'}</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                // Rellenar listas con capitanes y eventos click
+                const homeStartersContainer = lineupsDiv.querySelector('.team-section:first-child .starters-placeholder');
+                const homeSubsContainer = lineupsDiv.querySelector('.team-section:first-child .subs-placeholder');
+                const awayStartersContainer = lineupsDiv.querySelector('.team-section:last-child .starters-placeholder');
+                const awaySubsContainer = lineupsDiv.querySelector('.team-section:last-child .subs-placeholder');
+                
+                homeStartersContainer.appendChild(rebuildPlayerList(homeStartersData, 'home'));
+                awayStartersContainer.appendChild(rebuildPlayerList(awayStartersData, 'away'));
+                
+                homeSubsContainer.appendChild(rebuildSubsList(homeSubsData, 'home'));
+                awaySubsContainer.appendChild(rebuildSubsList(awaySubsData, 'away'));
+            }
+            toggleAlternateColorsFieldButtons();
+        }
+
+        // Aplicar configuración (fuente, tamaño, negrita, skip, showAlternate, tema, estadio, clima, tipo campo, árbitro, capitanes)
         function applySettings() {
             const fontFamily = document.getElementById('fontFamily').value;
             const fontSize = document.getElementById('fontSize').value;
@@ -4150,9 +4921,21 @@
             applyNarrationStyles();
             toggleAlternateColorsFieldButtons();
             
-            // Aplicar tema (ya se maneja con los botones)
-            // Los botones de tema ya tienen sus propios listeners, pero al aplicar también se guarda el tema actual
-            // (los botones ya actualizan currentTheme al hacer clic)
+            // Modo de visualización de alineaciones
+            const selectedViewMode = document.querySelector('input[name="lineupViewMode"]:checked').value;
+            visualLineupsMode = (selectedViewMode === 'visual');
+            localStorage.setItem('narrador-tsm-lineup-mode', visualLineupsMode ? 'visual' : 'default');
+            
+            // Capitanes
+            const homeCaptainSelect = document.getElementById('homeCaptainSelect');
+            const awayCaptainSelect = document.getElementById('awayCaptainSelect');
+            homeCaptain = homeCaptainSelect.value || null;
+            awayCaptain = awayCaptainSelect.value || null;
+            
+            // Re-renderizar alineaciones si estamos en la pestaña de lineups y ya hay datos
+            if (document.getElementById('lineups-tab').classList.contains('active') && window.homeLineupStarters) {
+                renderLineups();
+            }
             
             // Aplicar personalización de estadio y clima
             // Imagen
@@ -4182,6 +4965,21 @@
                 customStadiumCapacity = null;
             }
             updateStadiumDisplay();
+            
+            // Árbitro
+            const refereeSelect = document.getElementById('refereeSelect');
+            const selectedRefereeName = refereeSelect.value;
+            if (selectedRefereeName) {
+                const found = refereesDB.find(ref => ref.name === selectedRefereeName);
+                if (found) {
+                    customReferee = { name: found.name, nationality: found.nationality };
+                } else {
+                    customReferee = null;
+                }
+            } else {
+                customReferee = null;
+            }
+            updateRefereeDisplay();
             
             // Clima
             const weatherType = document.getElementById('weatherTypeSelect').value;
@@ -4285,6 +5083,19 @@
             toggleAlternateColorsFieldButtons();
             loadSavedTheme();
             populateTemperatureSelect();
+            // Cargar modo de alineaciones guardado
+            const savedMode = localStorage.getItem('narrador-tsm-lineup-mode');
+            if (savedMode === 'visual') {
+                visualLineupsMode = true;
+                const visualRadio = document.querySelector('input[name="lineupViewMode"][value="visual"]');
+                if (visualRadio) visualRadio.checked = true;
+            } else {
+                visualLineupsMode = false;
+                const defaultRadio = document.querySelector('input[name="lineupViewMode"][value="default"]');
+                if (defaultRadio) defaultRadio.checked = true;
+            }
+            // Cargar árbitros
+            fetchReferees();
         });
         
         // Función para abrir el popup de configuración (global)
@@ -4333,6 +5144,25 @@
                 weatherSelect.value = '';
                 tempSelect.value = '';
             }
+            // Cargar modo de alineaciones actual
+            const modeRadios = document.querySelectorAll('input[name="lineupViewMode"]');
+            modeRadios.forEach(radio => {
+                if ((radio.value === 'visual' && visualLineupsMode) || (radio.value === 'default' && !visualLineupsMode)) {
+                    radio.checked = true;
+                }
+            });
+            // Cargar árbitro actual en el select
+            const refereeSelect = document.getElementById('refereeSelect');
+            if (customReferee && customReferee.name) {
+                refereeSelect.value = customReferee.name;
+            } else {
+                refereeSelect.value = '';
+            }
+            // Cargar capitanes actuales en los selects
+            const homeCaptainSelect = document.getElementById('homeCaptainSelect');
+            const awayCaptainSelect = document.getElementById('awayCaptainSelect');
+            if (homeCaptain) homeCaptainSelect.value = homeCaptain;
+            if (awayCaptain) awayCaptainSelect.value = awayCaptain;
             
             document.getElementById('settings-popup').style.display = 'block';
             document.getElementById('settings-popup-overlay').style.display = 'block';
@@ -4343,7 +5173,16 @@
             document.getElementById('settings-popup-overlay').style.display = 'none';
         };
         
-        // Función para parsear y mostrar (sin cambios, pero se necesita reasignar openSettingsPopup antes)
+        // Botón eliminar imagen del estadio
+        document.getElementById('removeStadiumBtn')?.addEventListener('click', function() {
+            customStadiumImageUrl = null;
+            updateStadiumDisplay();
+        });
+        
+        // Botón árbitro aleatorio
+        window.selectRandomReferee = selectRandomReferee;
+        
+        // Función para parsear y mostrar (modificada para guardar datos de alineaciones y árbitro)
         async function parseAndDisplay(input) {
             if (!input.trim()) {
                 return;
@@ -4485,6 +5324,13 @@
                     playerElement.addEventListener('click', function() {
                         showPlayerPopup(playerData);
                     });
+                } else {
+                    // Si no hay datos, intentar al hacer clic
+                    playerElement.addEventListener('click', function() {
+                        const found = findPlayerByName(originalPlayerName);
+                        if (found) showPlayerPopup(found);
+                        else alert(`No se encontraron datos para ${formatPlayerName(originalPlayerName)}`);
+                    });
                 }
 
                 return { element: playerElement, player: playerData, position: pos, name: originalPlayerName };
@@ -4497,22 +5343,21 @@
             let awayStarters = awayStartersData.map(d => d.element);
             let homeSubs = homeSubsData.map(d => d.element);
             let awaySubs = awaySubsData.map(d => d.element);
-            window.homeLineupStarters = homeStartersData.map(d => ({
-                name: d.name,
-                position: d.position
-            }));
-            window.awayLineupStarters = awayStartersData.map(d => ({
-                name: d.name,
-                position: d.position
-            }));
-            window.homeLineupSubs = homeSubsData.map(d => ({
-                name: d.name,
-                position: d.position
-            }));
-            window.awayLineupSubs = awaySubsData.map(d => ({
-                name: d.name,
-                position: d.position
-            }));
+            
+            // Guardar datos estructurados para re-renderizado
+            window.homeLineupStarters = homeStartersData.map(d => ({ name: d.name, position: d.position }));
+            window.awayLineupStarters = awayStartersData.map(d => ({ name: d.name, position: d.position }));
+            window.homeLineupSubs = homeSubsData.map(d => ({ name: d.name, position: d.position }));
+            window.awayLineupSubs = awaySubsData.map(d => ({ name: d.name, position: d.position }));
+            window.homeStartersData = homeStartersData;
+            window.awayStartersData = awayStartersData;
+            window.homeSubsData = homeSubsData;
+            window.awaySubsData = awaySubsData;
+            window.homeFormation = homeFormation;
+            window.awayFormation = awayFormation;
+            window.homeManager = homeManager;
+            window.awayManager = awayManager;
+            
             function getKeyPlayers(lineupData) {
                 const players = lineupData.map(d => d.player).filter(p => p);
                 if (players.length === 0) return { topScorer: null, topAssister: null, star: null };
@@ -4548,72 +5393,14 @@
 
             const homeKeyPlayers = getKeyPlayers([...homeStartersData, ...homeSubsData]);
             const awayKeyPlayers = getKeyPlayers([...awayStartersData, ...awaySubsData]);
-
-            const lineupsDiv = document.getElementById('lineups');
-            lineupsDiv.innerHTML = `
-                <div class="team-section">
-                    <div class="formation">${homeFormation}</div>
-                    <div class="manager">${homeManager || ''}</div>
-                    <div class="lineup-titles">
-                        <h4>Titulares</h4>
-                        <h4 class="right-align">Suplentes</h4>
-                    </div>
-                    <div class="lineup-container">
-                        <ul class="starters"></ul>
-                        <div class="right-column">
-                            <ul class="subs"></ul>
-                            <button class="view-field-btn" onclick="showFieldModal('home')">Ver campo</button>
-                            <div class="key-players">
-                                <h4 class="right-align">Jugadores clave</h4>
-                                <ul>
-                                    <li>Máximo artillero: ${homeKeyPlayers.topScorer ? formatPlayerName(homeKeyPlayers.topScorer.Name) : 'N/A'}</li>
-                                    <li>Máximo asistente: ${homeKeyPlayers.topAssister ? formatPlayerName(homeKeyPlayers.topAssister.Name) : 'N/A'}</li>
-                                    <li>La estrella: ${homeKeyPlayers.star ? formatPlayerName(homeKeyPlayers.star.Name) : 'N/A'}</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="team-section">
-                    <div class="formation">${awayFormation}</div>
-                    <div class="manager">${awayManager || ''}</div>
-                    <div class="lineup-titles">
-                        <h4>Titulares</h4>
-                        <h4 class="right-align">Suplentes</h4>
-                    </div>
-                    <div class="lineup-container">
-                        <ul class="starters"></ul>
-                        <div class="right-column">
-                            <ul class="subs"></ul>
-                            <button class="view-field-btn" onclick="showFieldModal('away')">Ver campo</button>
-                            <div class="key-players">
-                                <h4 class="right-align">Jugadores clave</h4>
-                                <ul>
-                                    <li>Máximo artillero: ${awayKeyPlayers.topScorer ? formatPlayerName(awayKeyPlayers.topScorer.Name) : 'N/A'}</li>
-                                    <li>Máximo asistente: ${awayKeyPlayers.topAssister ? formatPlayerName(awayKeyPlayers.topAssister.Name) : 'N/A'}</li>
-                                    <li>La estrella: ${awayKeyPlayers.star ? formatPlayerName(awayKeyPlayers.star.Name) : 'N/A'}</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            const homeStartersList = lineupsDiv.querySelector('.team-section:first-child .starters');
-            homeStarters.forEach(player => homeStartersList.appendChild(player));
-
-            const homeSubsList = lineupsDiv.querySelector('.team-section:first-child .subs');
-            homeSubs.forEach(player => homeSubsList.appendChild(player));
-
-            const awayStartersList = lineupsDiv.querySelector('.team-section:last-child .starters');
-            awayStarters.forEach(player => awayStartersList.appendChild(player));
-
-            const awaySubsList = lineupsDiv.querySelector('.team-section:last-child .subs');
-            awaySubs.forEach(player => awaySubsList.appendChild(player));
+            window.homeKeyPlayers = homeKeyPlayers;
+            window.awayKeyPlayers = awayKeyPlayers;
             
-            toggleAlternateColorsFieldButtons();
+            // Render inicial
+            renderLineups();
             
-            const refereeInfo = document.getElementById('referee-info');
-            refereeInfo.innerHTML = '';
+            // Extraer árbitro original del texto (si no hay personalizado)
+            let originalRefereeInfo = '';
             const refereeIndex = lines.findIndex((l, idx) => idx >= i && l.trim().startsWith('Árbitro'));
             if (refereeIndex !== -1) {
                 const refLine = lines[refereeIndex].trim();
@@ -4622,9 +5409,18 @@
                 const refNameRaw = refParts.shift();
                 const refName = formatPlayerName(refNameRaw);
                 const refCountry = refParts.join(' ');
-                refereeInfo.innerHTML = `Árbitro: ${refName} (${refCountry})`;
+                originalRefereeInfo = `Árbitro: ${refName} (${refCountry})`;
                 i = refereeIndex + 1;
             }
+            
+            // Si hay árbitro personalizado, usarlo; si no, el original
+            if (customReferee && customReferee.name) {
+                const formattedRefName = formatPlayerName(customReferee.name);
+                document.getElementById('referee-info').innerHTML = `Árbitro: ${formattedRefName} (${customReferee.nationality.toUpperCase()})`;
+            } else {
+                document.getElementById('referee-info').innerHTML = originalRefereeInfo;
+            }
+            
             let narrationStart = -1;
             for (let j = i; j < lines.length; j++) {
                 if (lines[j].includes('Minuto de juego')) {
@@ -4999,6 +5795,11 @@
         window.toggleAlternateColors = toggleAlternateColors;
         window.applySettings = applySettings;
         window.scrollToTop = scrollToTop;
+        window.showPlayerPopupById = function(playerName) {
+            const playerData = findPlayerByName(playerName);
+            if (playerData) showPlayerPopup(playerData);
+        };
+        window.highlightStatsCells = highlightStatsCells;
         // showNextLine se definirá en startSimulation
     </script>
 </body>
