@@ -510,9 +510,6 @@
             margin-top: 30px;
             display: none;
         }
-        #header {
-            display: none;
-        }
         #control-bar {
             display: flex;
             justify-content: flex-start;
@@ -775,8 +772,52 @@
         .team-section li:hover {
             background-color: #2a2a3e;
         }
+        /* Ajustes para alineación derecha de suplentes, botón y clave jugadores */
+        .right-column {
+            width: 200px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            text-align: right;
+        }
+        .subs {
+            width: 100%;
+            text-align: right;
+        }
         .subs li {
             text-align: right;
+        }
+        .view-field-btn {
+            margin-top: 15px;
+            width: auto;
+            display: inline-block;
+        }
+        .key-players {
+            margin-top: 15px;
+            width: 100%;
+        }
+        .key-players h4 {
+            text-align: right;
+            color: #b8b8d1;
+            border-bottom: 2px solid #533d7d;
+            padding-bottom: 5px;
+            text-transform: uppercase;
+            font-size: 13px;
+            letter-spacing: 0.5px;
+            margin: 0 0 5px 0;
+        }
+        .key-players ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            text-align: right;
+        }
+        .key-players li {
+            padding: 5px 0;
+            border-bottom: 1px solid #3a3a4e;
+            font-size: 12px;
+            color: #b8b8d1;
+            cursor: default;
         }
         .pos-circle {
             display: inline-block;
@@ -882,6 +923,42 @@
             background: rgba(220, 53, 69, 0.4);
             font-weight: bold;
             box-shadow: inset 0 0 0 1px #dc3545;
+        }
+        /* Estilos para barras horizontales en estadísticas */
+        .stat-bar-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .stat-bar {
+            width: 160px;
+            height: 24px;
+            background-color: #3a3a4e;
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+        }
+        .stat-bar-home {
+            height: 100%;
+        }
+        .stat-bar-away {
+            height: 100%;
+        }
+        .stat-bar-value {
+            font-size: 13px;
+            font-weight: bold;
+            min-width: 35px;
+            text-align: center;
+        }
+        /* Checkbox deshabilitado */
+        .stats-highlight-container input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .stats-highlight-container input:disabled + label {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         /* Estilos para el popup de jugador */
@@ -1568,6 +1645,9 @@
                 flex-direction: column;
                 text-align: center;
             }
+            .stat-bar {
+                width: 100px;
+            }
         }
 
         .key-players {
@@ -2188,7 +2268,7 @@
                 <span id="pasteIcon" onclick="pasteFromClipboard()" title="Pegar del portapapeles" style="cursor: pointer; font-size: 18px;">📋</span>
             </div>
             <div id="inputContainer">
-                <textarea id="input" placeholder="Ejemplo: UEFA Champions League, Real Madrid vs. FC Bayern Munich (Sun Oct 26)..."></textarea>
+                <textarea id="input" placeholder="Ejemplo: UEFA Champions League, Real Madrid vs. Bayern de Múnich (Sun Oct 26)..."></textarea>
             </div>
         </div>
         <div id="output">
@@ -2263,11 +2343,13 @@
                 <div id="stats-message">Estadísticas no disponibles hasta el final del partido</div>
                 <div id="stats-content">
                     <div class="stats-highlight-container">
-                        <input type="checkbox" id="highlightBestStats" onchange="highlightStatsCells()">
+                        <input type="checkbox" id="highlightBestStats" onchange="highlightStatsCells()" title="Para seleccionar esta opción, desmarca primero 'Ver en barras'">
                         <label for="highlightBestStats">Destacar mejores valores</label>
+                        <input type="checkbox" id="viewBarsStats" onchange="toggleStatsView()">
+                        <label for="viewBarsStats">Ver en barras</label>
                     </div>
-                    <table class="stats-table">
-                        <thead>
+                    <table class="stats-table" id="statsTable">
+                        <thead id="statsTableHead">
                             <tr>
                                 <th>Estadística</th>
                                 <th id="stats-home-team"></th>
@@ -2377,7 +2459,7 @@
             <div id="popupNarration"></div>
         </div>
     </div>
-    <!-- Popup para configuración - MODIFICADO CON NUEVAS SECCIONES -->
+    <!-- Popup para configuración - MODIFICADO CON NUEVAS SECCIONES (sin anclar marcador) -->
     <div id="settings-popup-overlay" class="settings-popup-overlay" onclick="closeSettingsPopup()"></div>
     <div id="settings-popup" class="settings-popup">
         <span class="close" onclick="closeSettingsPopup()">&times;</span>
@@ -2545,6 +2627,9 @@
         // Variable para el modo de visualización de alineaciones
         let visualLineupsMode = false; // false = por defecto, true = visual
 
+        // Variable para modo barras en estadísticas
+        let statsViewBars = false;
+
         // Definición de campos con sus significados
         const headerFields = [
             'Name',
@@ -2627,16 +2712,14 @@
             }
         }
         
-        // Función para mostrar estadísticas del partido
+        // Función para mostrar estadísticas del partido (con estructura dinámica de tabla)
         function displayMatchStats() {
             const statsMessage = document.getElementById('stats-message');
             const statsContent = document.getElementById('stats-content');
-            const statsHomeTeam = document.getElementById('stats-home-team');
-            const statsAwayTeam = document.getElementById('stats-away-team');
             const statsBody = document.getElementById('stats-body');
+            const statsTableHead = document.getElementById('statsTableHead');
 
             if (!matchStats || matchStats.length === 0) {
-                statsMessage.textContent = 'No hay estadísticas disponibles para este partido';
                 statsMessage.style.display = 'block';
                 statsContent.style.display = 'none';
                 return;
@@ -2645,56 +2728,125 @@
             statsMessage.style.display = 'none';
             statsContent.style.display = 'block';
 
-            statsHomeTeam.textContent = homeTeamName;
-            statsAwayTeam.textContent = awayTeamName;
+            const useBars = document.getElementById('viewBarsStats').checked;
+            const homeColor = getTeamColors(homeTeamName).primary;
+            const awayColor = getTeamColors(awayTeamName).primary;
+
+            // Modificar cabecera según modo
+            if (useBars) {
+                statsTableHead.innerHTML = `
+                    <tr>
+                        <th>Estadística</th>
+                        <th>Distribución</th>
+                    </tr>
+                `;
+            } else {
+                statsTableHead.innerHTML = `
+                    <tr>
+                        <th>Estadística</th>
+                        <th id="stats-home-team">${homeTeamName}</th>
+                        <th id="stats-away-team">${awayTeamName}</th>
+                    </table>
+                `;
+            }
 
             statsBody.innerHTML = '';
 
             matchStats.forEach(stat => {
-                let homeValue = stat.home;
-                let awayValue = stat.away;
-                if (stat.name === 'Posesión') {
-                    homeValue += '%';
-                    awayValue += '%';
-                }
                 const row = document.createElement('tr');
-                row.setAttribute('data-stat-name', stat.name);
-                const homeTd = document.createElement('td');
-                homeTd.textContent = homeValue;
-                const awayTd = document.createElement('td');
-                awayTd.textContent = awayValue;
-                row.innerHTML = `
-                    <td class="stat-name">${stat.name}</td>
-                `;
-                row.appendChild(homeTd);
-                row.appendChild(awayTd);
-                // Guardar valores numéricos para comparar después
-                row.setAttribute('data-home-num', stat.home);
-                row.setAttribute('data-away-num', stat.away);
+                const statName = stat.name;
+                row.setAttribute('data-stat-name', statName);
+                const homeNum = parseFloat(stat.home);
+                const awayNum = parseFloat(stat.away);
+                row.setAttribute('data-home-num', homeNum);
+                row.setAttribute('data-away-num', awayNum);
+
+                // Celda nombre
+                const nameCell = document.createElement('td');
+                nameCell.className = 'stat-name';
+                nameCell.textContent = statName;
+                row.appendChild(nameCell);
+
+                if (useBars) {
+                    // Celda única de distribución con barra
+                    const distCell = document.createElement('td');
+                    let homePercent = 50;
+                    const total = homeNum + awayNum;
+                    if (total > 0) homePercent = (homeNum / total) * 100;
+                    const barHtml = `
+                        <div class="stat-bar-container">
+                            <div class="stat-bar-value">${homeNum}</div>
+                            <div class="stat-bar">
+                                <div class="stat-bar-home" style="width: ${homePercent}%; background-color: ${homeColor};"></div>
+                                <div class="stat-bar-away" style="width: ${100 - homePercent}%; background-color: ${awayColor};"></div>
+                            </div>
+                            <div class="stat-bar-value">${awayNum}</div>
+                        </div>
+                    `;
+                    distCell.innerHTML = barHtml;
+                    row.appendChild(distCell);
+                } else {
+                    // Dos celdas numéricas
+                    const homeCell = document.createElement('td');
+                    const awayCell = document.createElement('td');
+                    let homeDisplay = homeNum;
+                    let awayDisplay = awayNum;
+                    if (statName === 'Posesión') {
+                        homeDisplay = homeNum + '%';
+                        awayDisplay = awayNum + '%';
+                    }
+                    homeCell.textContent = homeDisplay;
+                    awayCell.textContent = awayDisplay;
+                    row.appendChild(homeCell);
+                    row.appendChild(awayCell);
+                }
                 statsBody.appendChild(row);
             });
-            // Aplicar resaltado si el checkbox está activo
-            highlightStatsCells();
+
+            // Resaltar mejores valores si no estamos en modo barras y el checkbox está activo
+            if (!useBars) {
+                highlightStatsCells();
+            } else {
+                // Limpiar resaltados porque no aplican en modo barras
+                const allCells = statsBody.querySelectorAll('td');
+                allCells.forEach(cell => cell.classList.remove('best-value-cell', 'worst-value-cell'));
+            }
         }
         
-        // Función para resaltar celdas con mejor valor (mayor o menor según estadística)
+        function toggleStatsView() {
+            const barsCheckbox = document.getElementById('viewBarsStats');
+            const highlightCheckbox = document.getElementById('highlightBestStats');
+            const useBars = barsCheckbox.checked;
+            
+            if (useBars) {
+                highlightCheckbox.disabled = true;
+                highlightCheckbox.checked = false;
+                highlightCheckbox.title = "Desmarca 'Ver en barras' para activar esta opción";
+            } else {
+                highlightCheckbox.disabled = false;
+                highlightCheckbox.title = "Para seleccionar esta opción, desmarca primero 'Ver en barras'";
+            }
+            
+            if (matchFinished && matchStats) {
+                displayMatchStats();
+            }
+        }
+        
+        // Función para resaltar celdas con mejor valor (solo en modo texto)
         function highlightStatsCells() {
             const highlightCheck = document.getElementById('highlightBestStats');
-            if (!highlightCheck) return;
+            const barsCheckbox = document.getElementById('viewBarsStats');
+            if (!highlightCheck || barsCheckbox.checked) return;
+            
             const shouldHighlight = highlightCheck.checked;
             const rows = document.querySelectorAll('#stats-body tr');
-            // Primero limpiar clases existentes
             rows.forEach(row => {
                 const cells = row.querySelectorAll('td');
-                cells.forEach(cell => {
-                    cell.classList.remove('best-value-cell', 'worst-value-cell');
-                });
-            });
-            if (!shouldHighlight) return;
-            
-            rows.forEach(row => {
+                // Limpiar clases previas
+                cells.forEach(cell => cell.classList.remove('best-value-cell', 'worst-value-cell'));
+                if (!shouldHighlight) return;
+                
                 const statName = row.getAttribute('data-stat-name');
-                // Estadísticas excluidas: Cambios
                 if (statName === 'Cambios') return;
                 
                 let homeVal = parseFloat(row.getAttribute('data-home-num'));
@@ -2703,25 +2855,17 @@
                 if (isNaN(awayVal)) awayVal = 0;
                 
                 const isLowerBetter = (statName === 'Rojas' || statName === 'Amarillas' || statName === 'Faltas');
-                const homeCell = row.cells[1];
-                const awayCell = row.cells[2];
+                // En modo texto las celdas son columna 1 y 2 (índices 1 y 2)
+                const homeCell = cells[1];
+                const awayCell = cells[2];
+                if (!homeCell || !awayCell) return;
                 
                 if (isLowerBetter) {
-                    // Destacar el menor valor
-                    if (homeVal < awayVal) {
-                        homeCell.classList.add('best-value-cell');
-                    } else if (awayVal < homeVal) {
-                        awayCell.classList.add('best-value-cell');
-                    } else if (homeVal === awayVal && homeVal !== 0) {
-                        // Si son iguales y no cero, ambas son mejores? No destacar ninguna para evitar ruido
-                    }
+                    if (homeVal < awayVal) homeCell.classList.add('best-value-cell');
+                    else if (awayVal < homeVal) awayCell.classList.add('best-value-cell');
                 } else {
-                    // Destacar el mayor valor
-                    if (homeVal > awayVal) {
-                        homeCell.classList.add('best-value-cell');
-                    } else if (awayVal > homeVal) {
-                        awayCell.classList.add('best-value-cell');
-                    }
+                    if (homeVal > awayVal) homeCell.classList.add('best-value-cell');
+                    else if (awayVal > homeVal) awayCell.classList.add('best-value-cell');
                 }
             });
         }
@@ -3861,6 +4005,10 @@
             }
             
             updateNarrationColors();
+            // Si estamos en modo visual, re-renderizar alineaciones para actualizar colores (aunque en visual no se usan estos colores)
+            if (document.getElementById('lineups-tab').classList.contains('active') && window.homeLineupStarters) {
+                renderLineups();
+            }
         }
 
         // Función para actualizar los colores de la narración
@@ -4627,7 +4775,7 @@
 
         // Nuevo icono de capitán (imagen)
         function getCaptainIcon() {
-            return `<img src="https://2img.net/i.imgur.com/VXKMXuJ.png" class="captain-icon" style="width:14px; height:14px; vertical-align: middle; margin-left: 6px;" title="Capitán">`;
+            return `<img src="https://i.imgur.com/APb2Cru.png" class="captain-icon" style="width:14px; height:14px; vertical-align: middle; margin-left: 6px;" title="Capitán">`;
         }
 
         // Función para renderizar alineaciones según el modo actual (MEJORADA: ancho equilibrado, separación mejorada, capitán con imagen, click en cualquier jugador)
@@ -4840,21 +4988,19 @@
                     return ul;
                 }
                 
+                // Estructura con título de suplentes dentro de la columna derecha
                 lineupsDiv.innerHTML = `
                     <div class="team-section">
                         <div class="formation">${homeFormation}</div>
                         <div class="manager">${homeManager}</div>
-                        <div class="lineup-titles">
-                            <h4>Titulares</h4>
-                            <h4 class="right-align">Suplentes</h4>
-                        </div>
                         <div class="lineup-container">
                             <div class="starters-placeholder"></div>
                             <div class="right-column">
+                                <h4 class="right-align" style="margin:0 0 5px 0;">Suplentes</h4>
                                 <div class="subs-placeholder"></div>
                                 <button class="view-field-btn" onclick="showFieldModal('home')">Ver campo</button>
                                 <div class="key-players">
-                                    <h4 class="right-align">Jugadores clave</h4>
+                                    <h4>Jugadores clave</h4>
                                     <ul>
                                         <li>Máximo artillero: ${homeKeyPlayers.topScorer ? formatPlayerName(homeKeyPlayers.topScorer.Name) : 'N/A'}</li>
                                         <li>Máximo asistente: ${homeKeyPlayers.topAssister ? formatPlayerName(homeKeyPlayers.topAssister.Name) : 'N/A'}</li>
@@ -4867,17 +5013,14 @@
                     <div class="team-section">
                         <div class="formation">${awayFormation}</div>
                         <div class="manager">${awayManager}</div>
-                        <div class="lineup-titles">
-                            <h4>Titulares</h4>
-                            <h4 class="right-align">Suplentes</h4>
-                        </div>
                         <div class="lineup-container">
                             <div class="starters-placeholder"></div>
                             <div class="right-column">
+                                <h4 class="right-align" style="margin:0 0 5px 0;">Suplentes</h4>
                                 <div class="subs-placeholder"></div>
                                 <button class="view-field-btn" onclick="showFieldModal('away')">Ver campo</button>
                                 <div class="key-players">
-                                    <h4 class="right-align">Jugadores clave</h4>
+                                    <h4>Jugadores clave</h4>
                                     <ul>
                                         <li>Máximo artillero: ${awayKeyPlayers.topScorer ? formatPlayerName(awayKeyPlayers.topScorer.Name) : 'N/A'}</li>
                                         <li>Máximo asistente: ${awayKeyPlayers.topAssister ? formatPlayerName(awayKeyPlayers.topAssister.Name) : 'N/A'}</li>
@@ -5094,6 +5237,24 @@
                 const defaultRadio = document.querySelector('input[name="lineupViewMode"][value="default"]');
                 if (defaultRadio) defaultRadio.checked = true;
             }
+            // Configurar dependencia entre checkboxes de estadísticas
+            const barsCheckbox = document.getElementById('viewBarsStats');
+            const highlightCheckbox = document.getElementById('highlightBestStats');
+            function toggleHighlightDisabled() {
+                if (barsCheckbox.checked) {
+                    highlightCheckbox.disabled = true;
+                    highlightCheckbox.checked = false;
+                    highlightCheckbox.title = "Desmarca 'Ver en barras' para activar esta opción";
+                } else {
+                    highlightCheckbox.disabled = false;
+                    highlightCheckbox.title = "Para seleccionar esta opción, desmarca primero 'Ver en barras'";
+                }
+                if (matchFinished && matchStats) {
+                    displayMatchStats();
+                }
+            }
+            barsCheckbox.addEventListener('change', toggleHighlightDisabled);
+            toggleHighlightDisabled();
             // Cargar árbitros
             fetchReferees();
         });
@@ -5163,6 +5324,9 @@
             const awayCaptainSelect = document.getElementById('awayCaptainSelect');
             if (homeCaptain) homeCaptainSelect.value = homeCaptain;
             if (awayCaptain) awayCaptainSelect.value = awayCaptain;
+            // Cargar estado del checkbox de barras
+            const barsCheckbox = document.getElementById('viewBarsStats');
+            if (barsCheckbox) barsCheckbox.checked = statsViewBars;
             
             document.getElementById('settings-popup').style.display = 'block';
             document.getElementById('settings-popup-overlay').style.display = 'block';
@@ -5367,12 +5531,12 @@
                 const topAssister = players.reduce((max, p) => parseInt(p.Ass) > parseInt(max.Ass) ? p : max, players[0]);
 
                 function getPrimaryAttr(player) {
-                    return Math.max(parseInt(player.St), parseInt(player.Tk), parseInt(player.Ps), parseInt(player.Sh));
+                  return Math.max(parseInt(player.St), parseInt(player.Tk), parseInt(player.Ps), parseInt(player.Sh));
                 }
 
                 function getSecondarySum(player, primary) {
-                    const attrs = [parseInt(player.St), parseInt(player.Tk), parseInt(player.Ps), parseInt(player.Sh)];
-                    return attrs.reduce((sum, attr) => sum + attr, 0) - primary;
+                  const attrs = [parseInt(player.St), parseInt(player.Tk), parseInt(player.Ps), parseInt(player.Sh)];
+                  return attrs.reduce((sum, attr) => sum + attr, 0) - primary;
                 }
 
                 let star = players[0];
@@ -5380,12 +5544,12 @@
                 let maxSecondary = getSecondarySum(star, maxPrimary);
 
                 players.forEach(p => {
-                    const primary = getPrimaryAttr(p);
-                    if (primary > maxPrimary || (primary === maxPrimary && getSecondarySum(p, primary) > maxSecondary)) {
-                        star = p;
-                        maxPrimary = primary;
-                        maxSecondary = getSecondarySum(p, primary);
-                    }
+                  const primary = getPrimaryAttr(p);
+                  if (primary > maxPrimary || (primary === maxPrimary && getSecondarySum(p, primary) > maxSecondary)) {
+                    star = p;
+                    maxPrimary = primary;
+                    maxSecondary = getSecondarySum(p, primary);
+                  }
                 });
 
                 return { topScorer, topAssister, star };
@@ -5800,6 +5964,7 @@
             if (playerData) showPlayerPopup(playerData);
         };
         window.highlightStatsCells = highlightStatsCells;
+        window.toggleStatsView = toggleStatsView;
         // showNextLine se definirá en startSimulation
     </script>
 </body>
