@@ -1709,6 +1709,15 @@
             font-style: italic;
             padding: 10px;
             text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        #weather-info img {
+            width: 32px;
+            height: 32px;
+            vertical-align: middle;
         }
         #ratings-message {
             text-align: center;
@@ -2746,7 +2755,7 @@
                         <th>Estadística</th>
                         <th id="stats-home-team">${homeTeamName}</th>
                         <th id="stats-away-team">${awayTeamName}</th>
-                    </table>
+                    </tr>
                 `;
             }
 
@@ -4505,6 +4514,32 @@
             return `${selectedWeather}, ${temperature} °C`;
         }
 
+        // Función para actualizar la visualización del clima con icono
+        function updateWeatherDisplay(weatherString) {
+            const weatherDiv = document.getElementById('weather-info');
+            // Extraer tipo de clima (primera palabra antes de la coma)
+            let weatherType = weatherString.split(',')[0].trim();
+            let iconUrl = '';
+            switch (weatherType) {
+                case 'Soleado':
+                    iconUrl = 'https://i.imgur.com/VnNEccD.png';
+                    break;
+                case 'Nublado':
+                    iconUrl = 'https://i.imgur.com/3wsCIsH.png';
+                    break;
+                case 'Lluvioso':
+                    iconUrl = 'https://i.imgur.com/VqHg4wq.png';
+                    break;
+                default:
+                    iconUrl = '';
+            }
+            if (iconUrl) {
+                weatherDiv.innerHTML = `<img src="${iconUrl}" alt="${weatherType}" style="width:32px; height:32px;"> ${weatherString}`;
+            } else {
+                weatherDiv.innerHTML = weatherString;
+            }
+        }
+
         async function fetchBadgesAndStadia() {
             try {
                 const badgeResponse = await fetch('https://www.tusoccermanager.com/h63-teambadgesdatabase-html');
@@ -4548,8 +4583,8 @@
                 
                 await fetchStadiumCapacity();
 
-                const weatherInfo = document.getElementById('weather-info');
-                weatherInfo.textContent = generateWeatherInfo();
+                const weatherString = generateWeatherInfo();
+                updateWeatherDisplay(weatherString);
                 
                 // Aplicar árbitro personalizado si existe
                 updateRefereeDisplay();
@@ -5136,8 +5171,8 @@
                 customWeather = null;
             }
             // Actualizar clima mostrado
-            const weatherInfoDiv = document.getElementById('weather-info');
-            weatherInfoDiv.textContent = generateWeatherInfo();
+            const weatherString = generateWeatherInfo();
+            updateWeatherDisplay(weatherString);
             
             if (!simulationStarted && skipEmptyMinutes !== prevSkip) {
                 if (skipEmptyMinutes) {
