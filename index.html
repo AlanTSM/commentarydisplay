@@ -2083,185 +2083,251 @@
             margin-bottom: 0;
         }
 
-        /* Estilos para la vista de alineaciones tipo campo (visual) - MODIFICADOS: círculos más pequeños, sin texto extra, mayor separación */
+        /* Estilos para la vista de alineaciones tipo campo (visual) - NUEVO ESTILO COMPLETO */
+        /* Variables para el campo visual (inspirado en la página de referencia) */
         .pitch-visual-container {
             display: flex;
             justify-content: center;
-            gap: 30px;
+            gap: 24px;
             flex-wrap: nowrap;
-        }
-        .pitch-side {
-            flex: 1;
-            min-width: 380px;
-            max-width: 520px;
-            background: #1a7a3a;
-            background-image: radial-gradient(circle at 10% 20%, rgba(255,255,255,0.1) 1%, transparent 1%);
-            background-size: 12px 12px;
-            border-radius: 20px;
-            padding: 16px 12px;
-            border: 2px solid white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-            position: relative;
+            max-width: 1100px;
             margin: 0 auto;
         }
-        /* Eliminamos los textos de equipo, formación y manager */
-        .pitch-side h3, .pitch-side .formation, .pitch-side .manager-vis {
-            display: none;
-        }
-        .pitch-grid {
+        .pitch-wrapper {
+            flex: 1;
+            min-width: 340px;
+            max-width: 460px;
             display: flex;
             flex-direction: column;
             gap: 12px;
-            min-height: 280px;
+        }
+        .team-banner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+        .team-banner .formation-vis {
+            font-size: 11px;
+            letter-spacing: 2px;
+            font-weight: 700;
+        }
+        .team-banner .manager-vis {
+            font-size: 10px;
+            color: #b8b8d1;
+            letter-spacing: 0.5px;
+        }
+        .pitch-side {
+            background: #1a5c32;
+            background-image: linear-gradient(0deg, rgba(255,255,255,0.04) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px),
+                              radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.07) 0%, transparent 60%),
+                              radial-gradient(ellipse at 50% 100%, rgba(255,255,255,0.05) 0%, transparent 50%);
+            background-size: 30px 30px, 30px 30px, 100% 100%, 100% 100%;
+            border-radius: 18px;
+            padding: 26px 20px 20px;
+            border: 2px solid rgba(255,255,255,0.15);
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 8px 32px rgba(0,0,0,0.4);
+            position: relative;
+            overflow: hidden;
+            height: 520px;
+        }
+        /* Línea central y círculo central */
+        .pitch-side::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 0;
+            border-top: 2px solid rgba(255,255,255,0.75);
+            z-index: 1;
+        }
+        .pitch-side .center-circle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 118px;
+            height: 118px;
+            border: 2px solid rgba(255,255,255,0.75);
+            border-radius: 50%;
+            z-index: 1;
+        }
+        /* Área grande */
+        .pitch-side .penalty-area {
+            position: absolute;
+            width: 52%;
+            height: 22%;
+            border: 2px solid rgba(255,255,255,0.75);
+            left: 24%;
+            z-index: 1;
+        }
+        .pitch-side .penalty-area.home { top: -1%; }
+        .pitch-side .penalty-area.away { bottom: -1%; }
+        /* Área pequeña */
+        .pitch-side .goal-area {
+            position: absolute;
+            width: 22%;
+            height: 8%;
+            border: 2px solid rgba(255,255,255,0.85);
+            left: 39%;
+            z-index: 1;
+        }
+        .pitch-side .goal-area.home { top: -1%; }
+        .pitch-side .goal-area.away { bottom: -1%; }
+        /* Punto de penalti */
+        .pitch-side .penalty-spot {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: rgba(255,255,255,0.9);
+            border-radius: 50%;
+            z-index: 1;
+        }
+        .pitch-side .penalty-spot.home { top: 15%; left: 50%; transform: translateX(-50%); }
+        .pitch-side .penalty-spot.away { bottom: 15%; left: 50%; transform: translateX(-50%); }
+        /* Media luna */
+        .pitch-side .penalty-arc-top {
+            position: absolute;
+            width: 90px;
+            height: 22px;
+            border: 2px solid rgba(255,255,255,0.75);
+            border-top: none;
+            border-radius: 0 0 100px 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            top: calc(21% - 2px);
+            z-index: 1;
+        }
+        .pitch-side .penalty-arc-bottom {
+            position: absolute;
+            width: 90px;
+            height: 22px;
+            border: 2px solid rgba(255,255,255,0.75);
+            border-bottom: none;
+            border-radius: 100px 100px 0 0;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: calc(21% - 2px);
+            z-index: 1;
+        }
+        /* Córners */
+        .pitch-side .corner {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.75);
+            z-index: 1;
+        }
+        .pitch-side .corner.top-left    { top: 0; left: 0; border-bottom-right-radius: 999px; border-top: none; border-left: none; }
+        .pitch-side .corner.top-right   { top: 0; right: 0; border-bottom-left-radius: 999px; border-top: none; border-right: none; }
+        .pitch-side .corner.bottom-left { bottom: 0; left: 0; border-top-right-radius: 999px; border-bottom: none; border-left: none; }
+        .pitch-side .corner.bottom-right{ bottom: 0; right: 0; border-top-left-radius: 999px; border-bottom: none; border-right: none; }
+
+        .pitch-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            min-height: 355px;
+            position: relative;
+            z-index: 2;
         }
         .pitch-row {
             display: flex;
             justify-content: center;
             align-items: center;
             flex-wrap: nowrap;
-            gap: 20px; /* Separación aumentada para dar más espacio */
-            min-height: 65px;
+            gap: 22px;
+            min-height: 68px;
         }
-        .player-card {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            width: 60px;
-        }
-        .player-circle-vis {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            background-size: cover;
-            background-position: center;
-            background-color: #f3f4f6;
-            border: 2px solid #fbbf24;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            transition: 0.1s;
-            cursor: pointer;
-        }
-        .player-circle-vis.gk { border-color: #ef4444; }
-        .player-circle-vis.df { border-color: #3b82f6; }
-        .player-circle-vis.dm { border-color: #8b5cf6; }
-        .player-circle-vis.mf { border-color: #10b981; }
-        .player-circle-vis.am { border-color: #f59e0b; }
-        .player-circle-vis.fw { border-color: #ec489a; }
-        .player-info-vis {
-            margin-top: 4px;
-            font-size: 9px;
-            font-weight: bold;
-            text-align: center;
-            color: white;
-            background: rgba(0,0,0,0.6);
-            padding: 2px 4px;
+        /* Banquillo */
+        .bench {
+            margin-top: 14px;
+            background: rgba(0,0,0,0.35);
             border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 3px;
-            white-space: nowrap;
+            padding: 12px 10px 10px;
+            border: 1px solid rgba(255,255,255,0.1);
         }
-        .player-flag-vis {
-            width: 14px;
-            height: 10px;
-            display: inline-block;
-            background-size: cover;
-            border-radius: 2px;
+        .bench-label {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.5);
+            text-align: center;
+            margin-bottom: 8px;
         }
-        /* Suplentes con el mismo estilo que titulares */
-        .substitutes-container {
-            margin-top: 20px;
-            padding-top: 10px;
-            border-top: 1px solid rgba(255,255,255,0.3);
+        .bench-container {
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
             gap: 12px;
         }
-        .substitute-card {
+        /* Tarjetas de jugador */
+        .player-card, .substitute-card {
             display: flex;
             flex-direction: column;
             align-items: center;
-            width: 60px;
+            width: 68px;
+            cursor: pointer;
         }
-        @media (max-width: 900px) {
-            .pitch-visual-container {
-                flex-wrap: wrap;
-            }
-            .pitch-side {
-                min-width: 100%;
-                max-width: 100%;
-            }
-        }
-        @media (max-width: 768px) {
-            .pitch-side { min-width: 280px; }
-            .player-card { width: 55px; }
-            .player-circle-vis { width: 40px; height: 40px; }
-            .player-info-vis { font-size: 8px; padding: 1px 3px; }
-            .pitch-row { gap: 15px; }
-            .substitute-card { width: 55px; }
-        }
-        /* Estilo para el selector de árbitro y capitanes */
-        .referee-selector, .captains-selector {
-            margin-bottom: 20px;
-        }
-        .referee-selector select, .captains-selector select {
-            width: 100%;
-            margin-bottom: 10px;
-        }
-        .referee-random-btn {
-            width: 100%;
-            background: #6c757d;
-            border-color: #adb5bd;
-        }
-        .referee-random-btn:hover {
-            background: #5a6268;
-        }
-        .captain-group {
-            margin-bottom: 15px;
-        }
-        .captain-group label {
-            font-weight: bold;
-            margin-bottom: 5px;
-            display: block;
-        }
-        /* Checkbox para destacar mejores estadísticas */
-        .stats-highlight-container {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            margin-bottom: 10px;
-            gap: 8px;
-        }
-        .stats-highlight-container input {
-            appearance: none;
-            width: 18px;
-            height: 18px;
-            border: 2px solid #533d7d;
+        .player-circle-vis {
+            width: 46px;
+            height: 46px;
             border-radius: 50%;
-            background: #2a2a3e;
-            cursor: pointer;
-            position: relative;
+            background-size: cover;
+            background-position: center;
+            background-color: #2a3a50;
+            border: 2.5px solid #fbbf24;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.35), 0 0 0 2px rgba(255,255,255,0.08);
+            transition: transform 0.15s, box-shadow 0.15s;
         }
-        .stats-highlight-container input:checked {
-            background: #7b2cbf;
-            border-color: #9d4edd;
+        .player-card:hover .player-circle-vis {
+            transform: scale(1.08);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5), 0 0 0 2px rgba(255,255,255,0.15);
         }
-        .stats-highlight-container input:checked::after {
-            content: '✓';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+        .substitute-card:hover .player-circle-vis {
+            transform: scale(1.08);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5), 0 0 0 2px rgba(255,255,255,0.15);
+        }
+        .player-circle-vis.gk  { border-color: #ef4444; }
+        .player-circle-vis.df  { border-color: #3b82f6; }
+        .player-circle-vis.dm  { border-color: #8b5cf6; }
+        .player-circle-vis.mf  { border-color: #10b981; }
+        .player-circle-vis.am  { border-color: #f59e0b; }
+        .player-circle-vis.fw  { border-color: #ec489a; }
+        .player-circle-vis.sub { border-color: #6b7280; opacity: 0.85; }
+
+        .player-info-vis {
+            margin-top: 5px;
+            font-size: 9px;
+            font-weight: 700;
+            text-align: center;
             color: white;
-            font-size: 12px;
-            font-weight: bold;
+            background: rgba(0,0,0,0.72);
+            padding: 3px 8px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            white-space: nowrap;
+            max-width: 68px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            letter-spacing: 0.2px;
         }
-        .stats-highlight-container label {
-            cursor: pointer;
-            user-select: none;
-            font-size: 13px;
-            color: #b8b8d1;
+
+        @media (max-width: 860px) {
+            .pitch-visual-container { flex-wrap: wrap; }
+            .pitch-wrapper { min-width: 100%; max-width: 100%; }
+        }
+        @media (max-width: 480px) {
+            .player-card, .substitute-card { width: 58px; }
+            .player-circle-vis { width: 42px; height: 42px; }
+            .player-info-vis { font-size: 8px; max-width: 58px; }
+            .pitch-row { gap: 14px; }
         }
     </style>
 </head>
@@ -2468,7 +2534,7 @@
             <div id="popupNarration"></div>
         </div>
     </div>
-    <!-- Popup para configuración - MODIFICADO CON NUEVAS SECCIONES (sin anclar marcador) -->
+    <!-- Popup para configuración - MODIFICADO CON NUEVAS SECCIONES -->
     <div id="settings-popup-overlay" class="settings-popup-overlay" onclick="closeSettingsPopup()"></div>
     <div id="settings-popup" class="settings-popup">
         <span class="close" onclick="closeSettingsPopup()">&times;</span>
@@ -2510,14 +2576,14 @@
             <button class="theme-option theme-uefa-conference" data-theme="uefa-conference" title="UEFA Conference League"></button>
         </div>
 
-        <!-- Nueva sección Tipo de campo -->
-        <label style="margin-top: 10px;">Tipo de campo</label>
+        <!-- Nueva sección Tipo de alineaciones (renombrado) -->
+        <label style="margin-top: 10px;">Tipo de alineaciones</label>
         <div style="display: flex; gap: 20px; margin-bottom: 20px;">
             <label style="display: flex; align-items: center; gap: 5px; font-weight: normal;">
-                <input type="radio" name="lineupViewMode" value="default" checked> Por defecto
+                <input type="radio" name="lineupViewMode" value="default" checked> Simples
             </label>
             <label style="display: flex; align-items: center; gap: 5px; font-weight: normal;">
-                <input type="radio" name="lineupViewMode" value="visual"> Visual
+                <input type="radio" name="lineupViewMode" value="visual"> Visuales
             </label>
         </div>
 
@@ -3250,7 +3316,7 @@
             playerStats.away.players.forEach(player => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${formatPlayerName(player.Name)}</td>
+                    <tr>${formatPlayerName(player.Name)}</td>
                     <td>${formatExpPoints(player.KAb)}</td>
                     <td>${formatExpPoints(player.TAb)}</td>
                     <td>${formatExpPoints(player.PAb)}</td>
@@ -3260,7 +3326,7 @@
             });
         }
 
-        // Función mejorada para extraer eventos destacados (soporta líneas sin guión)
+        // Función mejorada para extraer eventos destacados
         function extractMatchHighlights(inputText) {
             const lines = inputText.split('\n');
             let highlights = {
@@ -3324,7 +3390,6 @@
                     continue;
                 }
                 
-                // Detectar equipo visitante con o sin guión
                 if (foundFirstTeam && !foundSecondTeam && (line.includes('- Información del partido') || line.includes('Información del partido') ||
                                                           line.includes('- Informaci n del partido') || line.includes('Informaci n del partido') ||
                                                           line.includes('- Informacion del partido') || line.includes('Informacion del partido'))) {
@@ -3376,7 +3441,6 @@
             return highlights;
         }
 
-        // Función auxiliar para parsear cadenas de eventos
         function parseEventString(eventStr, type) {
             const events = [];
             
@@ -3434,7 +3498,6 @@
             return events;
         }
 
-        // Función para obtener icono de evento
         function getEventIcon(type) {
             const icons = {
                 'goal': 'https://i.imgur.com/mx330V5.png',
@@ -3448,7 +3511,6 @@
             return icons[type] || '';
         }
 
-        // Función para obtener la narración de un minuto específico
         function getNarrationForMinute(minute) {
             const lines = originalNarrationText.split('\n');
             const minutePlays = [];
@@ -3474,7 +3536,6 @@
             return minutePlays;
         }
 
-        // Función para obtener el resultado después de un gol
         function getGoalScore(minute) {
             const narrations = getNarrationForMinute(minute);
             if (narrations.length > 0) {
@@ -3490,7 +3551,6 @@
             return '';
         }
 
-        // Función para mostrar el popup de detalles del gol - MEJORADA
         function showGoalPopup(minute, player) {
             const narrations = getNarrationForMinute(minute);
             const popup = document.getElementById('goalPopup');
@@ -3559,14 +3619,12 @@
             popup.style.display = 'flex';
         }
 
-        // Función para cerrar el popup de gol
         function closeGoalPopup(event) {
             if (!event || event.target === event.currentTarget) {
                 document.getElementById('goalPopup').style.display = 'none';
             }
         }
 
-        // Función para verificar si un evento no gol debe usar formato con +
         function shouldUseAddedTime(eventType, narration) {
             const text = narration.join('\n').toLowerCase();
             if (eventType === 'yellowCard' && text.includes('tarjeta amarilla')) return true;
@@ -3575,7 +3633,6 @@
             return false;
         }
 
-        // Función para mostrar eventos en tiempo real
         function displayEventInRealTime(minute) {
             const eventsToShow = allEventsData.filter(event => event.minute === minute);
             
@@ -3589,7 +3646,6 @@
             });
         }
 
-        // Función para crear y añadir elemento de evento a la línea de tiempo
         function createAndAppendEventElement(event) {
             const timeline = document.getElementById('timeline');
             
@@ -3685,7 +3741,6 @@
             document.getElementById('highlights-content').style.display = 'block';
         }
 
-        // Función para filtrar eventos (solo goles)
         function filterEvents() {
             const goalsOnly = document.getElementById('goalsOnlyFilter').checked;
             const events = document.querySelectorAll('.timeline-event');
@@ -3704,7 +3759,6 @@
             });
         }
 
-        // Función para pegar del portapapeles
         async function pasteFromClipboard() {
             try {
                 const text = await navigator.clipboard.readText();
@@ -3716,7 +3770,6 @@
             }
         }
         
-        // Función para validar el formato del partido
         function validateFormat(text) {
             const lines = text.split('\n');
 
@@ -3727,7 +3780,6 @@
             return hasVs && hasLineups && hasNarration;
         }
         
-        // Función para validar y parsear
         async function validateAndParse() {
             const inputText = textarea.value.trim();
 
@@ -3750,7 +3802,6 @@
             await fetchBadgesAndStadia();
         }
         
-        // Función para cargar la base de datos de jugadores (incluyendo fecha de actualización)
         async function fetchPlayerDatabase() {
             try {
                 const response = await fetch('https://www.tusoccermanager.com/h85-playerdb-html');
@@ -3761,7 +3812,6 @@
                 const content = pre ? pre.textContent : text;
                 const lines = content.split('\n');
 
-                // Extraer fecha de actualización (última línea no vacía)
                 for (let i = lines.length - 1; i >= 0; i--) {
                     const trimmed = lines[i].trim();
                     if (trimmed && /^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
@@ -3814,7 +3864,6 @@
             }
         }
         
-        // Función para cargar las banderas
         async function fetchFlags() {
             try {
                 const response = await fetch('https://www.tusoccermanager.com/h86-flagdb-html');
@@ -3848,7 +3897,6 @@
             }
         }
         
-        // Función para cargar las caras
         async function fetchFaces() {
             try {
                 const response = await fetch('https://www.tusoccermanager.com/h88-facedb-html');
@@ -3865,7 +3913,6 @@
                         facesDB[match[1]] = match[2].trim();
                     }
                 }
-                // Asegurar que existe Unknown
                 if (!facesDB['Unknown']) {
                     facesDB['Unknown'] = 'https://2img.net/i.imgur.com/7Y9zAkb.png';
                 }
@@ -3875,7 +3922,6 @@
             }
         }
         
-        // Función para cargar la base de datos de árbitros
         async function fetchReferees() {
             try {
                 const response = await fetch('https://www.tusoccermanager.com/h136-refereedb-html');
@@ -3886,7 +3932,6 @@
                 const content = pre ? pre.textContent : text;
                 const lines = content.split('\n');
                 refereesDB = [];
-                // Buscar la línea que contiene la tabla (después de la línea de guiones)
                 let start = false;
                 for (let line of lines) {
                     line = line.trim();
@@ -3895,7 +3940,6 @@
                         continue;
                     }
                     if (!start || line === '') continue;
-                    // Formato: nombre(s) con guiones bajos, luego número, luego código país, luego número
                     const parts = line.split(/\s+/);
                     if (parts.length >= 4) {
                         const name = parts[0];
@@ -3903,9 +3947,7 @@
                         refereesDB.push({ name: name, nationality: nationality });
                     }
                 }
-                // Ordenar alfabéticamente por nombre
                 refereesDB.sort((a, b) => a.name.localeCompare(b.name));
-                // Llenar el select
                 const select = document.getElementById('refereeSelect');
                 select.innerHTML = '<option value="">-- Seleccionar árbitro --</option>';
                 refereesDB.forEach(ref => {
@@ -3919,7 +3961,6 @@
             }
         }
 
-        // Función para seleccionar árbitro al azar
         function selectRandomReferee() {
             if (refereesDB.length === 0) {
                 alert('No hay árbitros disponibles. Intenta recargar la página.');
@@ -3928,26 +3969,21 @@
             const randomIndex = Math.floor(Math.random() * refereesDB.length);
             const ref = refereesDB[randomIndex];
             customReferee = { name: ref.name, nationality: ref.nationality };
-            // Actualizar el select
             const select = document.getElementById('refereeSelect');
             select.value = ref.name;
-            // Actualizar la visualización del árbitro si ya hay un partido cargado
             updateRefereeDisplay();
         }
 
-        // Actualizar la visualización del árbitro en la interfaz
         function updateRefereeDisplay() {
             const refereeInfoDiv = document.getElementById('referee-info');
             if (customReferee && customReferee.name) {
                 const formattedName = formatPlayerName(customReferee.name);
                 refereeInfoDiv.innerHTML = `Árbitro: ${formattedName} (${customReferee.nationality.toUpperCase()})`;
             } else {
-                // Si no hay personalizado, se mantendrá el original (se establece al parsear)
-                // No hacer nada
+                // se mantendrá el original
             }
         }
 
-        // Función para cargar colores titulares
         async function fetchPrimaryColors() {
             try {
                 const response = await fetch('https://www.tusoccermanager.com/h96-teamcolourdb-html');
@@ -3958,7 +3994,6 @@
             }
         }
 
-        // Función para cargar colores suplentes
         async function fetchAlternateColors() {
             try {
                 const response = await fetch('https://www.tusoccermanager.com/h97-alternativeteamcolour-html');
@@ -3969,7 +4004,6 @@
             }
         }
 
-        // Función genérica para parsear bases de datos de colores
         function parseColorDatabase(text) {
             const colors = {};
             const lines = text.split('\n');
@@ -3989,7 +4023,6 @@
             return colors;
         }
 
-        // Función para obtener colores de un equipo según la configuración actual
         function getTeamColors(teamName) {
             if (!teamColorsPrimary[teamName]) {
                 return { primary: '#1e1e30', secondary: '#e0e0e0' };
@@ -4005,7 +4038,6 @@
             }
         }
 
-        // Función para alternar entre colores titulares y suplentes
         function toggleAlternateColors(team) {
             if (team === 'home') {
                 useAlternateColorsHome = !useAlternateColorsHome;
@@ -4014,13 +4046,11 @@
             }
             
             updateNarrationColors();
-            // Si estamos en modo visual, re-renderizar alineaciones para actualizar colores (aunque en visual no se usan estos colores)
             if (document.getElementById('lineups-tab').classList.contains('active') && window.homeLineupStarters) {
                 renderLineups();
             }
         }
 
-        // Función para actualizar los colores de la narración
         function updateNarrationColors() {
             const narrationDiv = document.getElementById('narration');
             
@@ -4031,7 +4061,6 @@
             }
         }
 
-        // Función para actualizar la barra de posesión
         function updatePossessionBar() {
             const bar = document.getElementById('possession-bar');
             const homeColors = getTeamColors(homeTeamName);
@@ -4042,7 +4071,6 @@
             bar.style.background = `linear-gradient(to right, ${homeColors.primary} 0% ${homePercent}%, ${awayColors.primary} ${homePercent}% 100%)`;
         }
         
-        // Función para formatear nombres de jugadores - MEJORADA
         function formatPlayerName(name) {
             if (!name.includes('_')) return name;
             if (name.split('_').length === 3) {
@@ -4070,7 +4098,6 @@
             }
         }
         
-        // Función para buscar un jugador en la base de datos por nombre
         function findPlayerByName(name) {
             const formattedName = formatPlayerName(name);
 
@@ -4102,7 +4129,6 @@
             return null;
         }
         
-        // Función para mostrar el popup del jugador (incluye fecha de actualización)
         function showPlayerPopup(player) {
             const popup = document.getElementById('player-popup');
             const overlay = document.getElementById('player-popup-overlay');
@@ -4184,13 +4210,11 @@
             overlay.style.display = 'block';
         }
         
-        // Función para cerrar el popup
         function closePlayerPopup() {
             document.getElementById('player-popup').style.display = 'none';
             document.getElementById('player-popup-overlay').style.display = 'none';
         }
         
-        // Funciones para el modal del campo - MODIFICADAS para usar colores de equipo
         function showFieldModal(team) {
             const modal = document.getElementById('field-modal');
             modal.style.display = 'flex';
@@ -4314,7 +4338,6 @@
             container.appendChild(playerElement);
         }
         
-        // Función para extraer resultado del descanso
         function extractHalftimeScore(line) {
             const scoreMatch = line.match(/(\d+-\d+)/);
             if (scoreMatch) {
@@ -4323,13 +4346,11 @@
             return null;
         }
         
-        // Función para mostrar resultado del descanso
         function displayHalftimeScore(score) {
             const halftimeScoreElement = document.getElementById('halftime-score');
             halftimeScoreElement.textContent = `DES: ${score}`;
         }
         
-        // Función para manejar eventos especiales en la narración
         function handleSpecialEvents(line) {
             const narrationDiv = document.getElementById('narration');
 
@@ -4384,7 +4405,6 @@
             inputVisible = !inputVisible;
         }
         
-        // Función mejorada para detectar el equipo en la narración
         function detectTeamFromNarration(line) {
             const colonIndex = line.indexOf(':');
             if (colonIndex === -1) return null;
@@ -4413,7 +4433,6 @@
             return teamKey || null;
         }
         
-        // Función para cargar capacidades de estadios
         async function fetchStadiumCapacity() {
             try {
                 const response = await fetch('https://www.tusoccermanager.com/h99-stadiacapacity-html');
@@ -4439,7 +4458,6 @@
             }
         }
 
-        // Función para actualizar imagen del estadio y capacidad según personalización o DB
         function updateStadiumDisplay() {
             const stadiumImg = document.getElementById('stadium-image');
             const capacityDiv = document.getElementById('stadium-capacity');
@@ -4447,13 +4465,12 @@
             if (customStadiumImageUrl) {
                 stadiumImg.src = customStadiumImageUrl;
             } else {
-                // Usar imagen de la base de datos si existe
                 const homeLower = homeTeamName.toLowerCase();
                 const homeStadiumUrl = stadiaDB[homeLower] || stadiaDB[homeLower.replace(/fc /g, '')] || stadiaDB[homeLower.replace(' ', '')] || null;
                 if (homeStadiumUrl) {
                     stadiumImg.src = homeStadiumUrl;
                 } else {
-                    stadiumImg.src = ''; // vacío
+                    stadiumImg.src = '';
                 }
             }
             
@@ -4473,10 +4490,27 @@
             }
         }
 
-        // Función para generar información meteorológica (respetando personalización)
+        // Función mejorada para generar información meteorológica respetando personalización
         function generateWeatherInfo() {
-            if (customWeather && customWeather.type && customWeather.temperature !== undefined) {
-                return `${customWeather.type}, ${customWeather.temperature} °C`;
+            if (customWeather && customWeather.type) {
+                let temperature = customWeather.temperature;
+                if (temperature === undefined || isNaN(temperature)) {
+                    // Generar temperatura automática según el tipo
+                    switch (customWeather.type) {
+                        case 'Soleado':
+                            temperature = Math.floor(Math.random() * (25 - 18 + 1)) + 18;
+                            break;
+                        case 'Nublado':
+                            temperature = Math.floor(Math.random() * (20 - 16 + 1)) + 16;
+                            break;
+                        case 'Lluvioso':
+                            temperature = Math.floor(Math.random() * (19 - 14 + 1)) + 14;
+                            break;
+                        default:
+                            temperature = Math.floor(Math.random() * (22 - 16 + 1)) + 16;
+                    }
+                }
+                return `${customWeather.type}, ${temperature} °C`;
             }
             
             const weatherTypes = ['Soleado', 'Nublado', 'Lluvioso'];
@@ -4514,10 +4548,8 @@
             return `${selectedWeather}, ${temperature} °C`;
         }
 
-        // Función para actualizar la visualización del clima con icono
         function updateWeatherDisplay(weatherString) {
             const weatherDiv = document.getElementById('weather-info');
-            // Extraer tipo de clima (primera palabra antes de la coma)
             let weatherType = weatherString.split(',')[0].trim();
             let iconUrl = '';
             switch (weatherType) {
@@ -4586,7 +4618,6 @@
                 const weatherString = generateWeatherInfo();
                 updateWeatherDisplay(weatherString);
                 
-                // Aplicar árbitro personalizado si existe
                 updateRefereeDisplay();
             } catch (e) {
                 console.error(e);
@@ -4678,7 +4709,6 @@
             return `${minute}`;
         }
 
-        // Función para aplicar estilos de narración
         function applyNarrationStyles() {
             const narrationDiv = document.getElementById('narration');
             const fontFamily = document.getElementById('fontFamily').value;
@@ -4690,7 +4720,6 @@
             narrationDiv.style.fontWeight = boldText ? 'bold' : 'normal';
         }
 
-        // Función para mostrar/ocultar elementos de colores suplentes y botones de campo
         function toggleAlternateColorsFieldButtons() {
             const alternateContainers = document.querySelectorAll('.alternate-colors-container');
             const fieldButtons = document.querySelectorAll('.view-field-btn');
@@ -4712,27 +4741,62 @@
             }
         }
 
-        // Función para aplicar el tema seleccionado
+        // Estilos unificados para los checkboxes de estadísticas (igual que "Sólo goles")
+        const style = document.createElement('style');
+        style.textContent = `
+            .stats-highlight-container input {
+                appearance: none;
+                width: 18px;
+                height: 18px;
+                border: 2px solid #533d7d;
+                border-radius: 50%;
+                background: #2a2a3e;
+                cursor: pointer;
+                position: relative;
+                transition: all 0.2s;
+            }
+            .stats-highlight-container input:hover {
+                border-color: #9d4edd;
+            }
+            .stats-highlight-container input:checked {
+                background: #7b2cbf;
+                border-color: #9d4edd;
+            }
+            .stats-highlight-container input:checked::after {
+                content: '✓';
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                color: white;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            .stats-highlight-container input:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+            .stats-highlight-container input:disabled + label {
+                opacity: 0.5;
+                cursor: not-allowed;
+            }
+        `;
+        document.head.appendChild(style);
+
         function applyTheme(themeName) {
-            // Remover todas las clases de tema del body
             document.body.classList.remove('theme-actual', 'theme-uefa-europa', 'theme-uefa-champions', 'theme-uefa-conference');
             
-            // Añadir la clase del tema seleccionado (excepto para 'actual' que no tiene clase)
             if (themeName !== 'actual') {
                 document.body.classList.add(`theme-${themeName}`);
             }
             
-            // Actualizar tema actual
             currentTheme = themeName;
             
-            // Guardar en localStorage
             localStorage.setItem('narrador-tsm-theme', themeName);
             
-            // Actualizar botones activos en el popup
             updateThemeButtons();
         }
 
-        // Función para actualizar los botones de tema en el popup
         function updateThemeButtons() {
             const themeButtons = document.querySelectorAll('.theme-option');
             themeButtons.forEach(button => {
@@ -4745,7 +4809,6 @@
             });
         }
 
-        // Función para cargar el tema guardado
         function loadSavedTheme() {
             const savedTheme = localStorage.getItem('narrador-tsm-theme');
             if (savedTheme) {
@@ -4755,7 +4818,6 @@
             }
         }
 
-        // Rellenar selector de temperatura
         function populateTemperatureSelect() {
             const tempSelect = document.getElementById('temperatureSelect');
             tempSelect.innerHTML = '<option value="">-- Automático --</option>';
@@ -4767,13 +4829,11 @@
             }
         }
 
-        // Poblar los selects de capitanes
         function populateCaptainSelects() {
             const homeSelect = document.getElementById('homeCaptainSelect');
             const awaySelect = document.getElementById('awayCaptainSelect');
             if (!homeSelect || !awaySelect) return;
             
-            // Obtener todos los jugadores de cada equipo (titulares + suplentes)
             const homePlayers = [];
             const awayPlayers = [];
             if (window.homeLineupStarters) {
@@ -4808,143 +4868,210 @@
             if (awayCaptain && awayPlayers.includes(awayCaptain)) awaySelect.value = awayCaptain;
         }
 
-        // Nuevo icono de capitán (imagen)
         function getCaptainIcon() {
             return `<img src="https://i.imgur.com/APb2Cru.png" class="captain-icon" style="width:14px; height:14px; vertical-align: middle; margin-left: 6px;" title="Capitán">`;
         }
 
-        // Función para renderizar alineaciones según el modo actual (MEJORADA: ancho equilibrado, separación mejorada, capitán con imagen, click en cualquier jugador)
-        function renderLineups() {
+        // ──────────────────────────────────────────────────────────────
+        // NUEVA FUNCIÓN PARA RENDERIZAR ALINEACIONES EN MODO VISUAL (sin leyenda)
+        // ──────────────────────────────────────────────────────────────
+        function renderVisualMode(homeStarters, awayStarters, homeSubs, awaySubs,
+                                  homeTeam, awayTeam, homeFormation, awayFormation,
+                                  homeManager, awayManager) {
             const lineupsDiv = document.getElementById('lineups');
-            if (!window.homeLineupStarters || !window.awayLineupStarters) return;
+            const order = ['GK', 'DF', 'DM', 'MF', 'AM', 'FW'];
+            const groupByPosition = (players) => {
+                const groups = { GK: [], DF: [], DM: [], MF: [], AM: [], FW: [] };
+                players.forEach(p => {
+                    if (groups[p.position]) groups[p.position].push(p);
+                });
+                return groups;
+            };
             
-            // Actualizar los selects de capitanes por si acaso
-            populateCaptainSelects();
+            const homeGroups = groupByPosition(homeStarters);
+            const awayGroups = groupByPosition(awayStarters);
             
-            if (visualLineupsMode) {
-                // Modo visual: mostrar campo con dos mitades, suplentes dentro del contenedor
-                const homeStarters = window.homeLineupStarters;
-                const awayStarters = window.awayLineupStarters;
-                const homeSubs = window.homeLineupSubs || [];
-                const awaySubs = window.awayLineupSubs || [];
-                const order = ['GK', 'DF', 'DM', 'MF', 'AM', 'FW'];
-                
-                // Función para agrupar jugadores por posición
-                const groupByPosition = (players) => {
-                    const groups = { GK: [], DF: [], DM: [], MF: [], AM: [], FW: [] };
-                    players.forEach(p => {
-                        if (groups[p.position]) groups[p.position].push(p);
-                    });
-                    return groups;
-                };
-                
-                const homeGroups = groupByPosition(homeStarters);
-                const awayGroups = groupByPosition(awayStarters);
-                
-                // Función para obtener la URL de la cara (con fallback a Unknown)
-                function getPlayerFaceUrl(playerName) {
-                    const playerData = findPlayerByName(playerName);
-                    if (playerData && facesDB[playerData.Name]) {
-                        return facesDB[playerData.Name];
-                    }
-                    return facesDB['Unknown'] || 'https://2img.net/i.imgur.com/7Y9zAkb.png';
+            function getPlayerFaceUrl(playerName) {
+                const playerData = findPlayerByName(playerName);
+                if (playerData && facesDB[playerData.Name]) {
+                    return facesDB[playerData.Name];
                 }
-                
-                // Obtener bandera de un jugador
-                function getPlayerFlagUrl(playerName) {
-                    const playerData = findPlayerByName(playerName);
-                    if (playerData && playerData.Nat) {
-                        const code = playerData.Nat.toLowerCase();
-                        return flagsDB[code] || '';
-                    }
-                    return '';
+                return facesDB['Unknown'] || 'https://2img.net/i/imgur.com/7Y9zAkb.png';
+            }
+            function getPlayerFlagUrl(playerName) {
+                const playerData = findPlayerByName(playerName);
+                if (playerData && playerData.Nat) {
+                    const code = playerData.Nat.toLowerCase();
+                    return flagsDB[code] || '';
                 }
-                
-                // Generar filas para un equipo (con espacio reservado para todas las posiciones)
-                const generateRows = (groups, teamSide) => {
-                    let rowsHtml = '';
-                    order.forEach(pos => {
-                        const players = groups[pos];
+                return '';
+            }
+            
+            function generatePitchRows(groups, teamSide) {
+                let rowsHtml = '';
+                order.forEach(pos => {
+                    const players = groups[pos];
+                    if (pos === 'AM' && players.length > 1) {
+                        if (players.length === 4) {
+                            rowsHtml += `<div class="pitch-row" style="justify-content: space-between; gap: 0; width: 100%;">`;
+                            rowsHtml += playerCardHTML(players[0], teamSide);
+                            rowsHtml += `<div style="display: flex; gap: 22px;">`;
+                            rowsHtml += playerCardHTML(players[1], teamSide);
+                            rowsHtml += playerCardHTML(players[2], teamSide);
+                            rowsHtml += `</div>`;
+                            rowsHtml += playerCardHTML(players[3], teamSide);
+                            rowsHtml += `</div>`;
+                        } else {
+                            rowsHtml += `<div class="pitch-row" style="justify-content: space-between; gap: 0; width: 100%;">`;
+                            players.forEach(p => { rowsHtml += playerCardHTML(p, teamSide); });
+                            rowsHtml += `</div>`;
+                        }
+                    } else {
                         rowsHtml += `<div class="pitch-row">`;
                         if (players.length === 0) {
-                            rowsHtml += `<div class="player-card" style="opacity:0; pointer-events:none;"><div class="player-circle-vis" style="background-color:transparent; border-color:transparent;"></div><div class="player-info-vis" style="visibility:hidden;">---</div></div>`;
+                            rowsHtml += `<div class="player-card" style="opacity:0;pointer-events:none;">
+                                            <div class="player-circle-vis" style="background:transparent;border-color:transparent;"></div>
+                                            <div class="player-info-vis" style="visibility:hidden;">---</div>
+                                         </div>`;
                         } else {
-                            players.forEach(player => {
-                                const faceUrl = getPlayerFaceUrl(player.name);
-                                const flagUrl = getPlayerFlagUrl(player.name);
-                                const formattedName = formatPlayerName(player.name);
-                                const isCaptain = (teamSide === 'home' && homeCaptain === player.name) || (teamSide === 'away' && awayCaptain === player.name);
-                                rowsHtml += `
-                                    <div class="player-card">
-                                        <div class="player-circle-vis ${player.position.toLowerCase()}" style="background-image: url('${faceUrl}'); background-size: cover; background-position: center;" title="${player.position} - ${formattedName}" onclick="showPlayerPopupById('${player.name}')"></div>
-                                        <div class="player-info-vis">
-                                            ${flagUrl ? `<div class="player-flag-vis" style="background-image: url('${flagUrl}'); background-size: cover;"></div>` : ''}
-                                            <span>${formattedName}</span>
-                                            ${isCaptain ? getCaptainIcon() : ''}
-                                        </div>
-                                    </div>
-                                `;
-                            });
+                            players.forEach(p => { rowsHtml += playerCardHTML(p, teamSide); });
                         }
                         rowsHtml += `</div>`;
-                    });
-                    return rowsHtml;
-                };
-                
-                // Generar HTML para los suplentes (con el mismo estilo que titulares)
-                const generateSubstitutes = (subs, teamSide) => {
-                    if (subs.length === 0) return '';
-                    let subsHtml = `<div class="substitutes-container">`;
-                    subs.forEach(sub => {
-                        const faceUrl = getPlayerFaceUrl(sub.name);
-                        const flagUrl = getPlayerFlagUrl(sub.name);
-                        const formattedName = formatPlayerName(sub.name);
-                        const isCaptain = (teamSide === 'home' && homeCaptain === sub.name) || (teamSide === 'away' && awayCaptain === sub.name);
-                        subsHtml += `
-                            <div class="substitute-card">
-                                <div class="player-circle-vis ${sub.position.toLowerCase()}" style="background-image: url('${faceUrl}'); background-size: cover; background-position: center;" onclick="showPlayerPopupById('${sub.name}')"></div>
-                                <div class="player-info-vis">
-                                    ${flagUrl ? `<div class="player-flag-vis" style="background-image: url('${flagUrl}'); background-size: cover;"></div>` : ''}
-                                    <span>${formattedName}</span>
-                                    ${isCaptain ? getCaptainIcon() : ''}
-                                </div>
-                            </div>
-                        `;
-                    });
-                    subsHtml += `</div>`;
-                    return subsHtml;
-                };
-                
-                const homeRows = generateRows(homeGroups, 'home');
-                const awayRows = generateRows(awayGroups, 'away');
-                const homeSubsHtml = generateSubstitutes(homeSubs, 'home');
-                const awaySubsHtml = generateSubstitutes(awaySubs, 'away');
-                
-                lineupsDiv.innerHTML = `
-                    <div class="pitch-visual-container">
-                        <div class="pitch-side">
-                            <div class="pitch-grid">
-                                ${homeRows}
-                            </div>
-                            ${homeSubsHtml}
-                        </div>
-                        <div class="pitch-side">
-                            <div class="pitch-grid">
-                                ${awayRows}
-                            </div>
-                            ${awaySubsHtml}
+                    }
+                });
+                return rowsHtml;
+            }
+            
+            function playerCardHTML(player, teamSide) {
+                const faceUrl = getPlayerFaceUrl(player.name);
+                const flagUrl = getPlayerFlagUrl(player.name);
+                const formattedName = formatPlayerName(player.name);
+                const isCaptain = (teamSide === 'home' && homeCaptain === player.name) || (teamSide === 'away' && awayCaptain === player.name);
+                const posClass = (player.position || 'sub').toLowerCase();
+                return `
+                    <div class="player-card" data-player-name="${player.name}" data-team="${teamSide}">
+                        <div class="player-circle-vis ${posClass}" style="background-image: url('${faceUrl}'); background-size: cover; background-position: center;" title="${player.position} – ${formattedName}"></div>
+                        <div class="player-info-vis">
+                            ${flagUrl ? `<div class="player-flag-vis" style="background-image: url('${flagUrl}'); background-size: cover; width:14px; height:10px; display:inline-block;"></div>` : ''}
+                            <span>${formattedName}</span>
+                            ${isCaptain ? getCaptainIcon() : ''}
                         </div>
                     </div>
                 `;
-                
-                // Añadir evento para mostrar popup del jugador por nombre
-                window.showPlayerPopupById = function(playerName) {
-                    const playerData = findPlayerByName(playerName);
+            }
+            
+            function generateBenchHTML(subs, teamSide) {
+                if (!subs.length) return '';
+                let html = `<div class="bench">
+                                <div class="bench-label">BANQUILLO</div>
+                                <div class="bench-container">`;
+                subs.forEach(sub => {
+                    const faceUrl = getPlayerFaceUrl(sub.name);
+                    const flagUrl = getPlayerFlagUrl(sub.name);
+                    const formattedName = formatPlayerName(sub.name);
+                    const isCaptain = (teamSide === 'home' && homeCaptain === sub.name) || (teamSide === 'away' && awayCaptain === sub.name);
+                    const posClass = (sub.position || 'sub').toLowerCase();
+                    html += `
+                        <div class="substitute-card" data-player-name="${sub.name}" data-team="${teamSide}">
+                            <div class="player-circle-vis ${posClass}" style="background-image: url('${faceUrl}'); background-size: cover; background-position: center;"></div>
+                            <div class="player-info-vis">
+                                ${flagUrl ? `<div class="player-flag-vis" style="background-image: url('${flagUrl}'); background-size: cover;"></div>` : ''}
+                                <span>${formattedName}</span>
+                                ${isCaptain ? getCaptainIcon() : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+                html += `</div></div>`;
+                return html;
+            }
+            
+            const homeRows = generatePitchRows(homeGroups, 'home');
+            const awayRows = generatePitchRows(awayGroups, 'away');
+            const homeBenchHtml = generateBenchHTML(homeSubs, 'home');
+            const awayBenchHtml = generateBenchHTML(awaySubs, 'away');
+            
+            const html = `
+                <div class="pitch-visual-container">
+                    <div class="pitch-wrapper">
+                        <div class="team-banner">
+                            ${homeFormation ? `<div class="formation-vis">${homeFormation}</div>` : ''}
+                            ${homeManager ? `<div class="manager-vis">${homeManager}</div>` : ''}
+                        </div>
+                        <div class="pitch-side">
+                            <div class="center-circle"></div>
+                            <div class="penalty-area home"></div>
+                            <div class="penalty-area away"></div>
+                            <div class="goal-area home"></div>
+                            <div class="goal-area away"></div>
+                            <div class="penalty-spot home"></div>
+                            <div class="penalty-spot away"></div>
+                            <div class="penalty-arc-top"></div>
+                            <div class="penalty-arc-bottom"></div>
+                            <div class="corner top-left"></div>
+                            <div class="corner top-right"></div>
+                            <div class="corner bottom-left"></div>
+                            <div class="corner bottom-right"></div>
+                            <div class="pitch-grid">${homeRows}</div>
+                        </div>
+                        ${homeBenchHtml}
+                    </div>
+                    <div class="pitch-wrapper">
+                        <div class="team-banner">
+                            ${awayFormation ? `<div class="formation-vis">${awayFormation}</div>` : ''}
+                            ${awayManager ? `<div class="manager-vis">${awayManager}</div>` : ''}
+                        </div>
+                        <div class="pitch-side">
+                            <div class="center-circle"></div>
+                            <div class="penalty-area home"></div>
+                            <div class="penalty-area away"></div>
+                            <div class="goal-area home"></div>
+                            <div class="goal-area away"></div>
+                            <div class="penalty-spot home"></div>
+                            <div class="penalty-spot away"></div>
+                            <div class="penalty-arc-top"></div>
+                            <div class="penalty-arc-bottom"></div>
+                            <div class="corner top-left"></div>
+                            <div class="corner top-right"></div>
+                            <div class="corner bottom-left"></div>
+                            <div class="corner bottom-right"></div>
+                            <div class="pitch-grid">${awayRows}</div>
+                        </div>
+                        ${awayBenchHtml}
+                    </div>
+                </div>
+            `;
+            
+            lineupsDiv.innerHTML = html;
+            
+            // Agregar eventos de clic para mostrar popup en todas las cartas (titulares y suplentes)
+            const allCards = lineupsDiv.querySelectorAll('.player-card, .substitute-card');
+            allCards.forEach(card => {
+                const playerName = card.getAttribute('data-player-name');
+                if (!playerName) return;
+                const playerData = findPlayerByName(playerName);
+                card.addEventListener('click', (e) => {
+                    e.stopPropagation();
                     if (playerData) showPlayerPopup(playerData);
-                    else alert(`No se encontraron datos para ${playerName}`);
-                };
+                    else alert(`No se encontraron datos para ${formatPlayerName(playerName)}`);
+                });
+            });
+        }
+        
+        // --- Función principal renderLineups (mantiene el modo actual) ---
+        function renderLineups() {
+            if (!window.homeLineupStarters || !window.awayLineupStarters) return;
+            
+            populateCaptainSelects();
+            
+            if (visualLineupsMode) {
+                renderVisualMode(window.homeLineupStarters, window.awayLineupStarters,
+                                 window.homeLineupSubs, window.awayLineupSubs,
+                                 homeTeamName, awayTeamName,
+                                 window.homeFormation || '', window.awayFormation || '',
+                                 window.homeManager || '', window.awayManager || '');
             } else {
-                // Modo por defecto: usar el HTML guardado originalmente, añadiendo icono de capitán y click en todos los li
+                // Modo por defecto (original)
                 const homeStartersData = window.homeStartersData || [];
                 const awayStartersData = window.awayStartersData || [];
                 const homeSubsData = window.homeSubsData || [];
@@ -4956,20 +5083,17 @@
                 const homeKeyPlayers = window.homeKeyPlayers || { topScorer: null, topAssister: null, star: null };
                 const awayKeyPlayers = window.awayKeyPlayers || { topScorer: null, topAssister: null, star: null };
                 
-                // Función para reconstruir lista con eventos click
                 function rebuildPlayerList(playersData, teamSide) {
                     const ul = document.createElement('ul');
                     ul.className = 'starters';
                     playersData.forEach(p => {
                         const li = p.element.cloneNode(true);
-                        // Asegurar evento click
                         if (p.player) {
                             li.onclick = function(e) {
                                 e.stopPropagation();
                                 showPlayerPopup(p.player);
                             };
                         } else {
-                            // Si no hay datos, intentar buscar
                             const playerData = findPlayerByName(p.name);
                             if (playerData) {
                                 li.onclick = function(e) {
@@ -5023,7 +5147,7 @@
                     return ul;
                 }
                 
-                // Estructura con título de suplentes dentro de la columna derecha
+                const lineupsDiv = document.getElementById('lineups');
                 lineupsDiv.innerHTML = `
                     <div class="team-section">
                         <div class="formation">${homeFormation}</div>
@@ -5066,7 +5190,6 @@
                         </div>
                     </div>
                 `;
-                // Rellenar listas con capitanes y eventos click
                 const homeStartersContainer = lineupsDiv.querySelector('.team-section:first-child .starters-placeholder');
                 const homeSubsContainer = lineupsDiv.querySelector('.team-section:first-child .subs-placeholder');
                 const awayStartersContainer = lineupsDiv.querySelector('.team-section:last-child .starters-placeholder');
@@ -5074,13 +5197,12 @@
                 
                 homeStartersContainer.appendChild(rebuildPlayerList(homeStartersData, 'home'));
                 awayStartersContainer.appendChild(rebuildPlayerList(awayStartersData, 'away'));
-                
                 homeSubsContainer.appendChild(rebuildSubsList(homeSubsData, 'home'));
                 awaySubsContainer.appendChild(rebuildSubsList(awaySubsData, 'away'));
             }
             toggleAlternateColorsFieldButtons();
         }
-
+        
         // Aplicar configuración (fuente, tamaño, negrita, skip, showAlternate, tema, estadio, clima, tipo campo, árbitro, capitanes)
         function applySettings() {
             const fontFamily = document.getElementById('fontFamily').value;
@@ -5099,24 +5221,20 @@
             applyNarrationStyles();
             toggleAlternateColorsFieldButtons();
             
-            // Modo de visualización de alineaciones
             const selectedViewMode = document.querySelector('input[name="lineupViewMode"]:checked').value;
             visualLineupsMode = (selectedViewMode === 'visual');
             localStorage.setItem('narrador-tsm-lineup-mode', visualLineupsMode ? 'visual' : 'default');
             
-            // Capitanes
             const homeCaptainSelect = document.getElementById('homeCaptainSelect');
             const awayCaptainSelect = document.getElementById('awayCaptainSelect');
             homeCaptain = homeCaptainSelect.value || null;
             awayCaptain = awayCaptainSelect.value || null;
             
-            // Re-renderizar alineaciones si estamos en la pestaña de lineups y ya hay datos
             if (document.getElementById('lineups-tab').classList.contains('active') && window.homeLineupStarters) {
                 renderLineups();
             }
             
-            // Aplicar personalización de estadio y clima
-            // Imagen
+            // Imagen de estadio
             const fileInput = document.getElementById('stadiumFileInput');
             if (fileInput.files.length > 0) {
                 const file = fileInput.files[0];
@@ -5127,7 +5245,6 @@
                 };
                 reader.readAsDataURL(file);
             }
-            // Capacidad
             const capacityInput = document.getElementById('capacityInput');
             let capacityVal = capacityInput.value.trim();
             if (capacityVal !== "") {
@@ -5144,7 +5261,6 @@
             }
             updateStadiumDisplay();
             
-            // Árbitro
             const refereeSelect = document.getElementById('refereeSelect');
             const selectedRefereeName = refereeSelect.value;
             if (selectedRefereeName) {
@@ -5159,18 +5275,20 @@
             }
             updateRefereeDisplay();
             
-            // Clima
+            // CLIMA: guardar personalización exacta
             const weatherType = document.getElementById('weatherTypeSelect').value;
             const temperature = document.getElementById('temperatureSelect').value;
-            if (weatherType && temperature !== "") {
+            if (weatherType) {
+                let temp = undefined;
+                if (temperature !== "") temp = parseInt(temperature, 10);
                 customWeather = {
                     type: weatherType,
-                    temperature: parseInt(temperature, 10)
+                    temperature: temp
                 };
             } else {
                 customWeather = null;
             }
-            // Actualizar clima mostrado
+            // Forzar actualización del clima mostrado
             const weatherString = generateWeatherInfo();
             updateWeatherDisplay(weatherString);
             
@@ -5238,7 +5356,6 @@
             return output;
         }
 
-        // Función para scroll suave al top
         function scrollToTop() {
             window.scrollTo({
                 top: 0,
@@ -5246,7 +5363,6 @@
             });
         }
 
-        // Mostrar/ocultar botón de volver arriba
         window.addEventListener('scroll', () => {
             const button = document.getElementById('back-to-top');
             if (window.scrollY > 300) {
@@ -5256,12 +5372,10 @@
             }
         });
         
-        // Inicializar visibilidad de elementos y cargar tema al cargar
         window.addEventListener('DOMContentLoaded', function() {
             toggleAlternateColorsFieldButtons();
             loadSavedTheme();
             populateTemperatureSelect();
-            // Cargar modo de alineaciones guardado
             const savedMode = localStorage.getItem('narrador-tsm-lineup-mode');
             if (savedMode === 'visual') {
                 visualLineupsMode = true;
@@ -5272,7 +5386,6 @@
                 const defaultRadio = document.querySelector('input[name="lineupViewMode"][value="default"]');
                 if (defaultRadio) defaultRadio.checked = true;
             }
-            // Configurar dependencia entre checkboxes de estadísticas
             const barsCheckbox = document.getElementById('viewBarsStats');
             const highlightCheckbox = document.getElementById('highlightBestStats');
             function toggleHighlightDisabled() {
@@ -5290,11 +5403,9 @@
             }
             barsCheckbox.addEventListener('change', toggleHighlightDisabled);
             toggleHighlightDisabled();
-            // Cargar árbitros
             fetchReferees();
         });
         
-        // Función para abrir el popup de configuración (global)
         window.openSettingsPopup = function() {
             const skipCheckbox = document.getElementById('skipEmptyMinutes');
             const showAlternateCheckbox = document.getElementById('showAlternateColorsField');
@@ -5321,45 +5432,42 @@
                 skipWarning.style.display = 'none';
             }
             
-            // Cargar valores actuales de estadio personalizado (si los hay)
             const capacityInput = document.getElementById('capacityInput');
             if (customStadiumCapacity !== null) {
                 capacityInput.value = customStadiumCapacity;
             } else {
                 capacityInput.value = '';
             }
-            // Limpiar selección de archivo
             document.getElementById('stadiumFileInput').value = '';
-            // Cargar clima personalizado actual en los selects
             const weatherSelect = document.getElementById('weatherTypeSelect');
             const tempSelect = document.getElementById('temperatureSelect');
             if (customWeather) {
                 weatherSelect.value = customWeather.type;
-                tempSelect.value = customWeather.temperature;
+                if (customWeather.temperature !== undefined && !isNaN(customWeather.temperature)) {
+                    tempSelect.value = customWeather.temperature;
+                } else {
+                    tempSelect.value = '';
+                }
             } else {
                 weatherSelect.value = '';
                 tempSelect.value = '';
             }
-            // Cargar modo de alineaciones actual
             const modeRadios = document.querySelectorAll('input[name="lineupViewMode"]');
             modeRadios.forEach(radio => {
                 if ((radio.value === 'visual' && visualLineupsMode) || (radio.value === 'default' && !visualLineupsMode)) {
                     radio.checked = true;
                 }
             });
-            // Cargar árbitro actual en el select
             const refereeSelect = document.getElementById('refereeSelect');
             if (customReferee && customReferee.name) {
                 refereeSelect.value = customReferee.name;
             } else {
                 refereeSelect.value = '';
             }
-            // Cargar capitanes actuales en los selects
             const homeCaptainSelect = document.getElementById('homeCaptainSelect');
             const awayCaptainSelect = document.getElementById('awayCaptainSelect');
             if (homeCaptain) homeCaptainSelect.value = homeCaptain;
             if (awayCaptain) awayCaptainSelect.value = awayCaptain;
-            // Cargar estado del checkbox de barras
             const barsCheckbox = document.getElementById('viewBarsStats');
             if (barsCheckbox) barsCheckbox.checked = statsViewBars;
             
@@ -5372,16 +5480,13 @@
             document.getElementById('settings-popup-overlay').style.display = 'none';
         };
         
-        // Botón eliminar imagen del estadio
         document.getElementById('removeStadiumBtn')?.addEventListener('click', function() {
             customStadiumImageUrl = null;
             updateStadiumDisplay();
         });
         
-        // Botón árbitro aleatorio
         window.selectRandomReferee = selectRandomReferee;
         
-        // Función para parsear y mostrar (modificada para guardar datos de alineaciones y árbitro)
         async function parseAndDisplay(input) {
             if (!input.trim()) {
                 return;
@@ -5524,7 +5629,6 @@
                         showPlayerPopup(playerData);
                     });
                 } else {
-                    // Si no hay datos, intentar al hacer clic
                     playerElement.addEventListener('click', function() {
                         const found = findPlayerByName(originalPlayerName);
                         if (found) showPlayerPopup(found);
@@ -5543,7 +5647,6 @@
             let homeSubs = homeSubsData.map(d => d.element);
             let awaySubs = awaySubsData.map(d => d.element);
             
-            // Guardar datos estructurados para re-renderizado
             window.homeLineupStarters = homeStartersData.map(d => ({ name: d.name, position: d.position }));
             window.awayLineupStarters = awayStartersData.map(d => ({ name: d.name, position: d.position }));
             window.homeLineupSubs = homeSubsData.map(d => ({ name: d.name, position: d.position }));
@@ -5595,10 +5698,8 @@
             window.homeKeyPlayers = homeKeyPlayers;
             window.awayKeyPlayers = awayKeyPlayers;
             
-            // Render inicial
             renderLineups();
             
-            // Extraer árbitro original del texto (si no hay personalizado)
             let originalRefereeInfo = '';
             const refereeIndex = lines.findIndex((l, idx) => idx >= i && l.trim().startsWith('Árbitro'));
             if (refereeIndex !== -1) {
@@ -5612,7 +5713,6 @@
                 i = refereeIndex + 1;
             }
             
-            // Si hay árbitro personalizado, usarlo; si no, el original
             if (customReferee && customReferee.name) {
                 const formattedRefName = formatPlayerName(customReferee.name);
                 document.getElementById('referee-info').innerHTML = `Árbitro: ${formattedRefName} (${customReferee.nationality.toUpperCase()})`;
@@ -5977,7 +6077,6 @@
             document.getElementById('minute').textContent = 'Finalizado';
         }
 
-        // Exponer funciones globales
         window.switchTab = switchTab;
         window.pasteFromClipboard = pasteFromClipboard;
         window.toggleInput = toggleInput;
@@ -6000,7 +6099,6 @@
         };
         window.highlightStatsCells = highlightStatsCells;
         window.toggleStatsView = toggleStatsView;
-        // showNextLine se definirá en startSimulation
     </script>
 </body>
 </html>
