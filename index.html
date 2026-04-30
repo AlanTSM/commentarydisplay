@@ -722,12 +722,25 @@
             font-weight: bold;
             color: #7b2cbf;
             margin-bottom: 5px;
+            font-size: 18px;
+            letter-spacing: 1px;
         }
         .manager {
             text-align: center;
             font-style: italic;
             color: #888;
             margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .manager-img {
+            width: 36px;
+            height: 36px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #9d4edd;
         }
         .lineup-titles {
             display: flex;
@@ -1862,7 +1875,7 @@
             padding: 20px;
             z-index: 1000;
             color: #e0e0e0;
-            max-width: 450px;
+            max-width: 500px;
             width: 90%;
             max-height: 80vh;
             overflow-y: auto;
@@ -2083,8 +2096,83 @@
             margin-bottom: 0;
         }
 
+        /* Estilos para la carga de imágenes de entrenadores */
+        .manager-images-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .manager-image-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: #2a2a3e;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .manager-image-item label {
+            margin: 0;
+            font-size: 13px;
+        }
+        .manager-preview {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .manager-preview-img {
+            width: 36px;
+            height: 36px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #9d4edd;
+        }
+        .manager-file-input {
+            flex: 1;
+        }
+        .remove-manager-btn {
+            background: #dc3545;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            width: 28px;
+            height: 28px;
+            font-size: 16px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+        .remove-manager-btn:hover {
+            background: #c82333;
+        }
+
+        /* Estilos para la táctica más vistosa en alineaciones visuales */
+        .formation-vis {
+            font-size: 18px;
+            font-weight: 800;
+            background: rgba(0,0,0,0.4);
+            padding: 4px 12px;
+            border-radius: 20px;
+            display: inline-block;
+            letter-spacing: 1px;
+            backdrop-filter: blur(2px);
+        }
+        .team-banner {
+            margin-bottom: 8px;
+        }
+        .manager-vis {
+            font-size: 12px;
+            color: #b8b8d1;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
         /* Estilos para la vista de alineaciones tipo campo (visual) - NUEVO ESTILO COMPLETO */
-        /* Variables para el campo visual (inspirado en la página de referencia) */
         .pitch-visual-container {
             display: flex;
             justify-content: center;
@@ -2105,17 +2193,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 2px;
-        }
-        .team-banner .formation-vis {
-            font-size: 11px;
-            letter-spacing: 2px;
-            font-weight: 700;
-        }
-        .team-banner .manager-vis {
-            font-size: 10px;
-            color: #b8b8d1;
-            letter-spacing: 0.5px;
+            gap: 4px;
         }
         .pitch-side {
             background: #1a5c32;
@@ -2271,6 +2349,7 @@
             align-items: center;
             width: 68px;
             cursor: pointer;
+            position: relative;
         }
         .player-circle-vis {
             width: 46px;
@@ -2282,6 +2361,7 @@
             border: 2.5px solid #fbbf24;
             box-shadow: 0 2px 8px rgba(0,0,0,0.35), 0 0 0 2px rgba(255,255,255,0.08);
             transition: transform 0.15s, box-shadow 0.15s;
+            position: relative;
         }
         .player-card:hover .player-circle-vis {
             transform: scale(1.08);
@@ -2408,9 +2488,9 @@
                 <div id="lineups"></div>
                 <div id="stadium-container">
                     <img id="stadium-image" alt="">
+                    <div id="stadium-capacity"></div>
                     <div id="referee-info"></div>
                     <div id="weather-info"></div>
-                    <div id="stadium-capacity"></div>
                 </div>
             </div>
 
@@ -2587,6 +2667,27 @@
             </label>
         </div>
 
+        <!-- Nueva sección Imágenes de entrenadores -->
+        <label>Imágenes de entrenadores</label>
+        <div class="manager-images-row">
+            <div class="manager-image-item">
+                <label>Entrenador local</label>
+                <div class="manager-preview">
+                    <img id="homeManagerPreview" class="manager-preview-img" src="" style="display: none;">
+                    <input type="file" id="homeManagerFile" accept="image/*" class="manager-file-input">
+                    <button id="removeHomeManagerBtn" class="remove-manager-btn" title="Eliminar">✖</button>
+                </div>
+            </div>
+            <div class="manager-image-item">
+                <label>Entrenador visitante</label>
+                <div class="manager-preview">
+                    <img id="awayManagerPreview" class="manager-preview-img" src="" style="display: none;">
+                    <input type="file" id="awayManagerFile" accept="image/*" class="manager-file-input">
+                    <button id="removeAwayManagerBtn" class="remove-manager-btn" title="Eliminar">✖</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Nueva sección Capitanes -->
         <label>Capitanes</label>
         <div class="captains-selector">
@@ -2705,6 +2806,14 @@
         // Variable para modo barras en estadísticas
         let statsViewBars = false;
 
+        // Tácticas dinámicas (se actualizan durante la simulación) - solo letras
+        let homeTactic = '';   // letra (ej. "A", "C", etc.)
+        let awayTactic = '';
+
+        // Imágenes de entrenadores
+        let homeManagerImage = null; // dataURL
+        let awayManagerImage = null;
+
         // Definición de campos con sus significados
         const headerFields = [
             'Name',
@@ -2810,7 +2919,7 @@
             // Modificar cabecera según modo
             if (useBars) {
                 statsTableHead.innerHTML = `
-                    <tr>
+                    <table>
                         <th>Estadística</th>
                         <th>Distribución</th>
                     </tr>
@@ -3316,7 +3425,7 @@
             playerStats.away.players.forEach(player => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <tr>${formatPlayerName(player.Name)}</td>
+                    <td>${formatPlayerName(player.Name)}</td>
                     <td>${formatExpPoints(player.KAb)}</td>
                     <td>${formatExpPoints(player.TAb)}</td>
                     <td>${formatExpPoints(player.PAb)}</td>
@@ -3812,10 +3921,14 @@
                 const content = pre ? pre.textContent : text;
                 const lines = content.split('\n');
 
-                for (let i = lines.length - 1; i >= 0; i--) {
+                // Buscar línea con "Última actualización:"
+                for (let i = 0; i < lines.length; i++) {
                     const trimmed = lines[i].trim();
-                    if (trimmed && /^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
-                        lastUpdateDate = trimmed;
+                    if (trimmed.toLowerCase().includes('última actualización:')) {
+                        const match = trimmed.match(/última actualización:\s*(.+)/i);
+                        if (match) {
+                            lastUpdateDate = match[1].trim();
+                        }
                         break;
                     }
                 }
@@ -3824,7 +3937,7 @@
                 let teamsList = [];
                 while (i < lines.length && !lines[i].startsWith('Name')) {
                     const line = lines[i].trim();
-                    if (line) {
+                    if (line && !line.toLowerCase().includes('última actualización')) {
                         teamsList.push(line);
                     }
                     i++;
@@ -4433,6 +4546,49 @@
             return teamKey || null;
         }
         
+        // Detectar cambio de táctica MEJORADO:
+        // - Solo letras mayúsculas A, C, D, E, L, N, P, T
+        // - Opcionalmente pueden llevar un punto, pero NO si ese punto va seguido de espacio y letra mayúscula (evita nombres como "T. Pobega")
+        // - No pueden ir seguidas de guión bajo (aunque en la línea formateada ya no hay, se mantiene por seguridad)
+        // - Excluye el patrón "D nde"
+        function detectTacticChange(line, currentPossessionTeam) {
+            if (!currentPossessionTeam) return null;
+            
+            // Excluir específicamente el patrón "D nde" (D + espacio + nde)
+            if (/D\s+nde/i.test(line)) return null;
+            
+            // Buscar una letra rodeada de espacios o inicio/fin, que NO vaya seguida de '_',
+            // y si tiene un punto, ese punto no debe ir seguido de espacio + mayúscula.
+            // La expresión: (?:^|\s) - inicio o espacio, luego la letra, luego opcionalmente un punto
+            // que NO tiene delante un guión bajo y que tampoco va seguido de espacio+mayúscula.
+            // Luego debe ir seguido de espacio o fin de línea.
+            const pattern = /(?:^|\s)([ACDELNPT])(?![_])(?:\.(?!\s+[A-Z]))?(?=\s|$)/;
+            const match = line.match(pattern);
+            if (match) {
+                const letter = match[1];
+                // Garantizar que es mayúscula (por si acaso)
+                if (letter === letter.toUpperCase() && letter !== letter.toLowerCase()) {
+                    return { team: currentPossessionTeam, tactic: letter };
+                }
+            }
+            return null;
+        }
+
+        // Actualizar la táctica mostrada en la interfaz
+        function updateTeamTactic(teamName, newTactic) {
+            if (teamName === homeTeamName) {
+                homeTactic = newTactic;
+            } else if (teamName === awayTeamName) {
+                awayTactic = newTactic;
+            } else {
+                return;
+            }
+            // Si la pestaña de alineaciones está activa, refrescar la vista
+            if (document.getElementById('lineups-tab').classList.contains('active') && window.homeLineupStarters) {
+                renderLineups();
+            }
+        }
+
         async function fetchStadiumCapacity() {
             try {
                 const response = await fetch('https://www.tusoccermanager.com/h99-stadiacapacity-html');
@@ -4872,8 +5028,20 @@
             return `<img src="https://i.imgur.com/APb2Cru.png" class="captain-icon" style="width:14px; height:14px; vertical-align: middle; margin-left: 6px;" title="Capitán">`;
         }
 
+        // Función auxiliar para extraer la letra de la formación (ej. "4-3-2-1 A" → "A")
+        function extractTacticLetter(formation) {
+            if (!formation) return '';
+            const parts = formation.trim().split(/\s+/);
+            const lastPart = parts[parts.length - 1];
+            // Si la última parte es una letra mayúscula de las válidas, devolverla
+            if (/^[ACDELNPT]$/.test(lastPart)) {
+                return lastPart;
+            }
+            return '';
+        }
+
         // ──────────────────────────────────────────────────────────────
-        // NUEVA FUNCIÓN PARA RENDERIZAR ALINEACIONES EN MODO VISUAL (sin leyenda)
+        // FUNCIÓN PARA RENDERIZAR ALINEACIONES EN MODO VISUAL (con táctica dinámica)
         // ──────────────────────────────────────────────────────────────
         function renderVisualMode(homeStarters, awayStarters, homeSubs, awaySubs,
                                   homeTeam, awayTeam, homeFormation, awayFormation,
@@ -4896,7 +5064,7 @@
                 if (playerData && facesDB[playerData.Name]) {
                     return facesDB[playerData.Name];
                 }
-                return facesDB['Unknown'] || 'https://2img.net/i/imgur.com/7Y9zAkb.png';
+                return facesDB['Unknown'] || 'https://2img.net/i.imgur.com/7Y9zAkb.png';
             }
             function getPlayerFlagUrl(playerName) {
                 const playerData = findPlayerByName(playerName);
@@ -4991,12 +5159,19 @@
             const homeBenchHtml = generateBenchHTML(homeSubs, 'home');
             const awayBenchHtml = generateBenchHTML(awaySubs, 'away');
             
+            // Mostrar la letra de la táctica actual si existe
+            const homeDisplayTactic = homeTactic ? homeTactic : '';
+            const awayDisplayTactic = awayTactic ? awayTactic : '';
+            
+            const homeManagerImgHtml = homeManagerImage ? `<img src="${homeManagerImage}" class="manager-img" style="width:36px;height:36px;object-fit:cover;border-radius:4px;">` : '';
+            const awayManagerImgHtml = awayManagerImage ? `<img src="${awayManagerImage}" class="manager-img" style="width:36px;height:36px;object-fit:cover;border-radius:4px;">` : '';
+            
             const html = `
                 <div class="pitch-visual-container">
                     <div class="pitch-wrapper">
                         <div class="team-banner">
-                            ${homeFormation ? `<div class="formation-vis">${homeFormation}</div>` : ''}
-                            ${homeManager ? `<div class="manager-vis">${homeManager}</div>` : ''}
+                            ${homeDisplayTactic ? `<div class="formation-vis">${homeDisplayTactic}</div>` : ''}
+                            ${homeManager ? `<div class="manager-vis">${homeManagerImgHtml} ${homeManager}</div>` : ''}
                         </div>
                         <div class="pitch-side">
                             <div class="center-circle"></div>
@@ -5018,8 +5193,8 @@
                     </div>
                     <div class="pitch-wrapper">
                         <div class="team-banner">
-                            ${awayFormation ? `<div class="formation-vis">${awayFormation}</div>` : ''}
-                            ${awayManager ? `<div class="manager-vis">${awayManager}</div>` : ''}
+                            ${awayDisplayTactic ? `<div class="formation-vis">${awayDisplayTactic}</div>` : ''}
+                            ${awayManager ? `<div class="manager-vis">${awayManagerImgHtml} ${awayManager}</div>` : ''}
                         </div>
                         <div class="pitch-side">
                             <div class="center-circle"></div>
@@ -5044,7 +5219,7 @@
             
             lineupsDiv.innerHTML = html;
             
-            // Agregar eventos de clic para mostrar popup en todas las cartas (titulares y suplentes)
+            // Agregar eventos de clic para mostrar popup en todas las cartas
             const allCards = lineupsDiv.querySelectorAll('.player-card, .substitute-card');
             allCards.forEach(card => {
                 const playerName = card.getAttribute('data-player-name');
@@ -5058,7 +5233,7 @@
             });
         }
         
-        // --- Función principal renderLineups (mantiene el modo actual) ---
+        // --- Función principal renderLineups (modo simple con táctica dinámica, modo visual con táctica) ---
         function renderLineups() {
             if (!window.homeLineupStarters || !window.awayLineupStarters) return;
             
@@ -5071,17 +5246,19 @@
                                  window.homeFormation || '', window.awayFormation || '',
                                  window.homeManager || '', window.awayManager || '');
             } else {
-                // Modo por defecto (original)
+                // Modo por defecto (Simple) - Mostrar solo la letra de la táctica
                 const homeStartersData = window.homeStartersData || [];
                 const awayStartersData = window.awayStartersData || [];
                 const homeSubsData = window.homeSubsData || [];
                 const awaySubsData = window.awaySubsData || [];
-                const homeFormation = window.homeFormation || '';
-                const awayFormation = window.awayFormation || '';
                 const homeManager = window.homeManager || '';
                 const awayManager = window.awayManager || '';
                 const homeKeyPlayers = window.homeKeyPlayers || { topScorer: null, topAssister: null, star: null };
                 const awayKeyPlayers = window.awayKeyPlayers || { topScorer: null, topAssister: null, star: null };
+                
+                // Mostrar la letra de la táctica actual si existe
+                const homeDisplayTactic = homeTactic ? homeTactic : '';
+                const awayDisplayTactic = awayTactic ? awayTactic : '';
                 
                 function rebuildPlayerList(playersData, teamSide) {
                     const ul = document.createElement('ul');
@@ -5148,10 +5325,12 @@
                 }
                 
                 const lineupsDiv = document.getElementById('lineups');
+                const homeManagerImgHtml = homeManagerImage ? `<img src="${homeManagerImage}" class="manager-img">` : '';
+                const awayManagerImgHtml = awayManagerImage ? `<img src="${awayManagerImage}" class="manager-img">` : '';
                 lineupsDiv.innerHTML = `
                     <div class="team-section">
-                        <div class="formation">${homeFormation}</div>
-                        <div class="manager">${homeManager}</div>
+                        ${homeDisplayTactic ? `<div class="formation">${homeDisplayTactic}</div>` : ''}
+                        <div class="manager">${homeManagerImgHtml} ${homeManager}</div>
                         <div class="lineup-container">
                             <div class="starters-placeholder"></div>
                             <div class="right-column">
@@ -5170,8 +5349,8 @@
                         </div>
                     </div>
                     <div class="team-section">
-                        <div class="formation">${awayFormation}</div>
-                        <div class="manager">${awayManager}</div>
+                        ${awayDisplayTactic ? `<div class="formation">${awayDisplayTactic}</div>` : ''}
+                        <div class="manager">${awayManagerImgHtml} ${awayManager}</div>
                         <div class="lineup-container">
                             <div class="starters-placeholder"></div>
                             <div class="right-column">
@@ -5292,6 +5471,26 @@
             const weatherString = generateWeatherInfo();
             updateWeatherDisplay(weatherString);
             
+            // Imágenes de entrenadores
+            const homeManagerFile = document.getElementById('homeManagerFile').files[0];
+            if (homeManagerFile) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    homeManagerImage = e.target.result;
+                    if (document.getElementById('lineups-tab').classList.contains('active')) renderLineups();
+                };
+                reader.readAsDataURL(homeManagerFile);
+            }
+            const awayManagerFile = document.getElementById('awayManagerFile').files[0];
+            if (awayManagerFile) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    awayManagerImage = e.target.result;
+                    if (document.getElementById('lineups-tab').classList.contains('active')) renderLineups();
+                };
+                reader.readAsDataURL(awayManagerFile);
+            }
+            
             if (!simulationStarted && skipEmptyMinutes !== prevSkip) {
                 if (skipEmptyMinutes) {
                     textarea.value = rawInput;
@@ -5404,6 +5603,49 @@
             barsCheckbox.addEventListener('change', toggleHighlightDisabled);
             toggleHighlightDisabled();
             fetchReferees();
+            
+            // Botones de eliminar imagen de entrenadores
+            document.getElementById('removeHomeManagerBtn').addEventListener('click', function() {
+                homeManagerImage = null;
+                document.getElementById('homeManagerFile').value = '';
+                document.getElementById('homeManagerPreview').style.display = 'none';
+                if (document.getElementById('lineups-tab').classList.contains('active')) renderLineups();
+            });
+            document.getElementById('removeAwayManagerBtn').addEventListener('click', function() {
+                awayManagerImage = null;
+                document.getElementById('awayManagerFile').value = '';
+                document.getElementById('awayManagerPreview').style.display = 'none';
+                if (document.getElementById('lineups-tab').classList.contains('active')) renderLineups();
+            });
+            // Previsualización de imágenes de entrenadores
+            document.getElementById('homeManagerFile').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(ev) {
+                        const preview = document.getElementById('homeManagerPreview');
+                        preview.src = ev.target.result;
+                        preview.style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    document.getElementById('homeManagerPreview').style.display = 'none';
+                }
+            });
+            document.getElementById('awayManagerFile').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(ev) {
+                        const preview = document.getElementById('awayManagerPreview');
+                        preview.src = ev.target.result;
+                        preview.style.display = 'block';
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    document.getElementById('awayManagerPreview').style.display = 'none';
+                }
+            });
         });
         
         window.openSettingsPopup = function() {
@@ -5470,6 +5712,22 @@
             if (awayCaptain) awayCaptainSelect.value = awayCaptain;
             const barsCheckbox = document.getElementById('viewBarsStats');
             if (barsCheckbox) barsCheckbox.checked = statsViewBars;
+            
+            // Previsualizar imágenes de entrenadores en el popup
+            if (homeManagerImage) {
+                document.getElementById('homeManagerPreview').src = homeManagerImage;
+                document.getElementById('homeManagerPreview').style.display = 'block';
+            } else {
+                document.getElementById('homeManagerPreview').style.display = 'none';
+            }
+            if (awayManagerImage) {
+                document.getElementById('awayManagerPreview').src = awayManagerImage;
+                document.getElementById('awayManagerPreview').style.display = 'block';
+            } else {
+                document.getElementById('awayManagerPreview').style.display = 'none';
+            }
+            document.getElementById('homeManagerFile').value = '';
+            document.getElementById('awayManagerFile').value = '';
             
             document.getElementById('settings-popup').style.display = 'block';
             document.getElementById('settings-popup-overlay').style.display = 'block';
@@ -5579,6 +5837,11 @@
             const awayManager = mgrParts[1].replace(/@/g, '').trim();
             homeTeamName = homeTeam || homeTeamConfirm;
             awayTeamName = awayTeam || awayTeamConfirm;
+            
+            // Extraer la letra de la táctica de las formaciones iniciales
+            homeTactic = extractTacticLetter(homeFormation);
+            awayTactic = extractTacticLetter(awayFormation);
+            
             document.getElementById('home-team-name').textContent = homeTeamName;
             document.getElementById('away-team-name').textContent = awayTeamName;
             
@@ -5618,7 +5881,7 @@
                 if (pos === 'SUB') {
                     playerHtml = `${playerName} ${flagHtml}<span class="pos-circle ${pos.toLowerCase()}">${pos}</span>`;
                 } else {
-                    playerHtml = `<span class="pos-circle ${pos.toLowerCase()}">${pos}</span>${flagHtml}${playerName}`;
+                    playerHtml = `<span class="pos-circle ${pos.toLowerCase()}">${pos}</span>${flagHtml}<span class="player-name">${playerName}</span>`;
                 }
 
                 const playerElement = document.createElement('li');
@@ -5865,6 +6128,14 @@
                             updatePossessionBar();
                         }
 
+                        // Detectar cambio de táctica en esta línea (usando el equipo que tiene la posesión actualmente)
+                        if (currentTeamColor) {
+                            const tacticChange = detectTacticChange(line, currentTeamColor);
+                            if (tacticChange) {
+                                updateTeamTactic(tacticChange.team, tacticChange.tactic);
+                            }
+                        }
+
                         const colonIndex = line.indexOf(':');
                         if (colonIndex !== -1) {
                             let afterColon = line.substring(colonIndex + 1).trim();
@@ -5980,6 +6251,9 @@
             recentPlays = [];
             updatePossessionBar();
             playerStats = null;
+            // Restaurar la letra de la táctica desde la formación original
+            homeTactic = extractTacticLetter(window.homeFormation || '');
+            awayTactic = extractTacticLetter(window.awayFormation || '');
             document.getElementById('pauseButton').textContent = 'Pausar';
             document.getElementById('score').textContent = '0 - 0';
             document.getElementById('halftime-score').textContent = '';
@@ -6004,6 +6278,11 @@
 
             document.getElementById('ratings-message').style.display = 'block';
             document.getElementById('ratings-content').style.display = 'none';
+
+            // Refrescar alineaciones para que muestren las tácticas originales
+            if (window.homeLineupStarters) {
+                renderLineups();
+            }
         }
 
         function fastForwardToEnd() {
