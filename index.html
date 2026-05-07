@@ -586,8 +586,8 @@
             border: 2px solid #533d7d;
             background: #1e1e30;
             padding: 15px;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 18px;
             line-height: 1.3;
             overflow-y: auto;
             border-radius: 5px;
@@ -2032,20 +2032,14 @@
             transform: scale(1.1);
         }
 
-        /* Estilos para el campo de carga de imagen del estadio */
-        #stadium-image-upload {
-            margin-bottom: 15px;
+        /* Estilos para el campo de carga de imagen del estadio - alineado con crucecita */
+        .stadium-upload-row {
             display: flex;
             align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
         }
-        #stadium-image-upload input {
-            background: #2a2a3e;
-            border: 1px solid #533d7d;
-            border-radius: 5px;
-            padding: 6px;
-            color: #e0e0e0;
+        .stadium-upload-row input {
             flex: 1;
         }
         .remove-stadium-btn {
@@ -2053,8 +2047,8 @@
             border: none;
             border-radius: 5px;
             color: white;
-            width: 30px;
-            height: 30px;
+            width: 34px;
+            height: 34px;
             font-size: 16px;
             cursor: pointer;
             display: inline-flex;
@@ -2147,6 +2141,32 @@
         }
         .remove-manager-btn:hover {
             background: #c82333;
+        }
+
+        /* Estilos para nombres de entrenadores */
+        .manager-names-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .manager-name-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .manager-name-item label {
+            margin: 0;
+            font-size: 13px;
+        }
+        .manager-name-item input {
+            padding: 8px;
+            border: 2px solid #533d7d;
+            border-radius: 5px;
+            background: #2a2a3e;
+            color: #e0e0e0;
+            font-size: 14px;
         }
 
         /* Estilos para la táctica más vistosa en alineaciones visuales */
@@ -2642,17 +2662,17 @@
         <h3>Configuración</h3>
         <label for="fontFamily">Fuente:</label>
         <select id="fontFamily">
-            <option value="Arial, sans-serif" selected>Arial</option>
-            <option value="'Segoe UI', Tahoma, Geneva, Verdana, sans-serif">Segoe UI</option>
+            <option value="Arial, sans-serif">Arial</option>
+            <option value="'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" selected>Segoe UI</option>
             <option value="'Montserrat', sans-serif">Montserrat</option>
             <option value="monospace">Monospace</option>
         </select>
         <label for="fontSize">Tamaño de fuente:</label>
         <select id="fontSize">
             <option value="12px">12px</option>
-            <option value="14px" selected>14px</option>
+            <option value="14px">14px</option>
             <option value="16px">16px</option>
-            <option value="18px">18px</option>
+            <option value="18px" selected>18px</option>
             <option value="20px">20px</option>
             <option value="22px">22px</option>
         </select>
@@ -2709,6 +2729,19 @@
             </div>
         </div>
 
+        <!-- Nueva sección Nombres de entrenadores -->
+        <label>Nombres de entrenadores</label>
+        <div class="manager-names-row">
+            <div class="manager-name-item">
+                <label>Entrenador local</label>
+                <input type="text" id="homeManagerNameInput" placeholder="Nombre del entrenador local">
+            </div>
+            <div class="manager-name-item">
+                <label>Entrenador visitante</label>
+                <input type="text" id="awayManagerNameInput" placeholder="Nombre del entrenador visitante">
+            </div>
+        </div>
+
         <!-- Nueva sección Capitanes -->
         <label>Capitanes</label>
         <div class="captains-selector">
@@ -2726,9 +2759,9 @@
             </div>
         </div>
 
-        <!-- Sección Estadio -->
+        <!-- Sección Estadio con alineación vertical mejorada -->
         <label>Estadio</label>
-        <div id="stadium-image-upload">
+        <div class="stadium-upload-row">
             <input type="file" id="stadiumFileInput" accept="image/*">
             <button class="remove-stadium-btn" id="removeStadiumBtn" title="Eliminar imagen personalizada">✖</button>
         </div>
@@ -2758,7 +2791,6 @@
             </select>
             <select id="temperatureSelect">
                 <option value="">-- Automático --</option>
-                <!-- Opciones de -5 a 45 -->
             </select>
         </div>
 
@@ -2772,7 +2804,7 @@
         let isPaused = false;
         let timeoutId = null;
         let narrationLines = [];
-        let originalNarrationLines = []; // para detección de sustituciones (texto sin formatear)
+        let originalNarrationLines = [];
         let lineIndex = 0;
         let homeTeamName = '';
         let awayTeamName = '';
@@ -2803,87 +2835,46 @@
         let badgesDB = {};
         let stadiaDB = {};
         let stadiumCapacityDB = {};
-        let refereesDB = []; // array de { name, nationality }
-        let lastUpdateDate = ''; // fecha de última actualización de la base de datos de jugadores
+        let refereesDB = [];
+        let lastUpdateDate = '';
         
-        // Nuevas variables para manejar colores suplentes
         let useAlternateColorsHome = false;
         let useAlternateColorsAway = false;
         let teamColorsPrimary = {};
         let teamColorsAlternate = {};
 
-        // Variables para personalización de estadio y clima
         let customStadiumImageUrl = null;
         let customStadiumCapacity = null;
-        let customWeather = null; // { type: "Soleado", temperature: 19 }
-        let customReferee = null; // { name: "Slavko_Vincic", nationality: "svn" }
+        let customWeather = null;
+        let customReferee = null;
 
-        // Capitanes
-        let homeCaptain = null;   // nombre original (con guiones bajos)
+        let homeCaptain = null;
         let awayCaptain = null;
 
-        // Variable para el modo de visualización de alineaciones
-        let visualLineupsMode = false; // false = por defecto, true = visual
-
-        // Variable para modo barras en estadísticas
+        let visualLineupsMode = false;
         let statsViewBars = false;
 
-        // Tácticas dinámicas (se actualizan durante la simulación) - solo letras
-        let homeTactic = '';   // letra (ej. "A", "C", etc.)
+        let homeTactic = '';
         let awayTactic = '';
 
-        // Imágenes de entrenadores
-        let homeManagerImage = null; // dataURL
+        let homeManagerImage = null;
         let awayManagerImage = null;
 
-        // --- Variables para el sistema de sustituciones dinámicas ---
-        // Almacenamos los objetos de los jugadores (con name y position) para titulares y suplentes actualizados en tiempo real
-        let currentHomeStarters = []; // array de objetos { name, position }
-        let currentHomeSubs = [];      // array de objetos { name, position }
+        let currentHomeStarters = [];
+        let currentHomeSubs = [];
         let currentAwayStarters = [];
         let currentAwaySubs = [];
 
-        // Conjunto para registrar pares de jugadores que ya han sido intercambiados (sin importar orden)
-        let substitutedPairs = new Set(); // clave: `${name1}|${name2}` con nombres ordenados alfabéticamente
-
-        // Conjunto global de todos los nombres de jugadores (originales) para detectar sustituciones
+        let substitutedPairs = new Set();
         let playerNamesSet = new Set();
+        let redCardedPlayers = new Set();
 
-        // Jugadores expulsados (para el icono de tarjeta roja en visual)
-        let redCardedPlayers = new Set(); // nombres originales de jugadores expulsados
-
-        // Timeout para el glow del marcador
         let scoreGlowTimeout = null;
 
-        // Definición de campos con sus significados
         const headerFields = [
-            'Name',
-            'Age',
-            'Nat',
-            'St',
-            'Tk',
-            'Ps',
-            'Sh',
-            'Ag',
-            'KAb',
-            'TAb',
-            'PAb',
-            'SAb',
-            'Gam',
-            'Sub',
-            'Min',
-            'Mom',
-            'Sav',
-            'Con',
-            'Ktk',
-            'Kps',
-            'Sht',
-            'Gls',
-            'Ass',
-            'DP',
-            'Inj',
-            'Sus',
-            'Fit'
+            'Name', 'Age', 'Nat', 'St', 'Tk', 'Ps', 'Sh', 'Ag', 'KAb', 'TAb',
+            'PAb', 'SAb', 'Gam', 'Sub', 'Min', 'Mom', 'Sav', 'Con', 'Ktk',
+            'Kps', 'Sht', 'Gls', 'Ass', 'DP', 'Inj', 'Sus', 'Fit'
         ];
 
         const inputSection = document.getElementById('inputSection');
@@ -2893,7 +2884,6 @@
         const textarea = document.getElementById('input');
         const output = document.getElementById('output');
         
-        // Función para cambiar entre pestañas
         function switchTab(tabId) {
             const tabContents = document.querySelectorAll('.tab-content');
             tabContents.forEach(content => {
@@ -2909,7 +2899,6 @@
             event.target.classList.add('active');
 
             if (tabId === 'lineups-tab') {
-                // Re-renderizar alineaciones según el modo actual
                 if (currentHomeStarters.length && currentAwayStarters.length) {
                     renderLineups();
                 }
@@ -2937,7 +2926,6 @@
             }
         }
         
-        // Función para mostrar estadísticas del partido (con estructura dinámica de tabla)
         function displayMatchStats() {
             const statsMessage = document.getElementById('stats-message');
             const statsContent = document.getElementById('stats-content');
@@ -2957,7 +2945,6 @@
             const homeColor = getTeamColors(homeTeamName).primary;
             const awayColor = getTeamColors(awayTeamName).primary;
 
-            // Modificar cabecera según modo
             if (useBars) {
                 statsTableHead.innerHTML = `
                     <tr>
@@ -2986,14 +2973,12 @@
                 row.setAttribute('data-home-num', homeNum);
                 row.setAttribute('data-away-num', awayNum);
 
-                // Celda nombre
                 const nameCell = document.createElement('td');
                 nameCell.className = 'stat-name';
                 nameCell.textContent = statName;
                 row.appendChild(nameCell);
 
                 if (useBars) {
-                    // Celda única de distribución con barra
                     const distCell = document.createElement('td');
                     let homePercent = 50;
                     const total = homeNum + awayNum;
@@ -3011,7 +2996,6 @@
                     distCell.innerHTML = barHtml;
                     row.appendChild(distCell);
                 } else {
-                    // Dos celdas numéricas
                     const homeCell = document.createElement('td');
                     const awayCell = document.createElement('td');
                     let homeDisplay = homeNum;
@@ -3028,11 +3012,9 @@
                 statsBody.appendChild(row);
             });
 
-            // Resaltar mejores valores si no estamos en modo barras y el checkbox está activo
             if (!useBars) {
                 highlightStatsCells();
             } else {
-                // Limpiar resaltados porque no aplican en modo barras
                 const allCells = statsBody.querySelectorAll('td');
                 allCells.forEach(cell => cell.classList.remove('best-value-cell', 'worst-value-cell'));
             }
@@ -3057,7 +3039,6 @@
             }
         }
         
-        // Función para resaltar celdas con mejor valor (solo en modo texto)
         function highlightStatsCells() {
             const highlightCheck = document.getElementById('highlightBestStats');
             const barsCheckbox = document.getElementById('viewBarsStats');
@@ -3067,7 +3048,6 @@
             const rows = document.querySelectorAll('#stats-body tr');
             rows.forEach(row => {
                 const cells = row.querySelectorAll('td');
-                // Limpiar clases previas
                 cells.forEach(cell => cell.classList.remove('best-value-cell', 'worst-value-cell'));
                 if (!shouldHighlight) return;
                 
@@ -3080,7 +3060,6 @@
                 if (isNaN(awayVal)) awayVal = 0;
                 
                 const isLowerBetter = (statName === 'Rojas' || statName === 'Amarillas' || statName === 'Faltas');
-                // En modo texto las celdas son columna 1 y 2 (índices 1 y 2)
                 const homeCell = cells[1];
                 const awayCell = cells[2];
                 if (!homeCell || !awayCell) return;
@@ -3095,7 +3074,6 @@
             });
         }
 
-        // Función para extraer estadísticas del partido - MEJORADA
         function extractMatchStats() {
             const inputText = originalNarrationText;
             const lines = inputText.split('\n');
@@ -3114,7 +3092,6 @@
 
             const stats = [];
             let i = statsStartIndex + 1;
-
             while (i < lines.length && 
                   (lines[i].trim() === '' || 
                    lines[i].includes('---') || 
@@ -3153,7 +3130,6 @@
             return stats.length > 0 ? stats : null;
         }
 
-        // Función para extraer estadísticas de jugadores
         function extractPlayerStats() {
             const lines = originalNarrationText.split('\n');
             const statsSections = [];
@@ -3206,7 +3182,6 @@
             return statsSections.length === 2 ? { home: statsSections[0], away: statsSections[1] } : null;
         }
 
-        // Función para calcular puntuación de jugador - MODIFICADA
         function calculateRating(player, isWinner, goalsConceded, playerOfTheMatch, bestTeamPlayer, isPlayerOfTheMatch) {
             let rating = 6.0;
 
@@ -3245,7 +3220,6 @@
             return parseFloat(rating.toFixed(1));
         }
 
-        // Función para mostrar puntuaciones - MODIFICADA
         function displayPlayerRatings() {
             const ratingsMessage = document.getElementById('ratings-message');
             const ratingsContent = document.getElementById('ratings-content');
@@ -3417,7 +3391,6 @@
             });
         }
 
-        // Función para mostrar puntos de experiencia
         function displayExperiencePoints() {
             const experienceMessage = document.getElementById('experience-message');
             const experienceContent = document.getElementById('experience-content');
@@ -3476,7 +3449,6 @@
             });
         }
 
-        // Función mejorada para extraer eventos destacados
         function extractMatchHighlights(inputText) {
             const lines = inputText.split('\n');
             let highlights = {
@@ -3492,7 +3464,6 @@
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i].trim();
                 
-                // Detectar equipo local con o sin guión
                 if (!foundFirstTeam && (line.includes('- Información del partido') || line.includes('Información del partido') || 
                                         line.includes('- Informaci n del partido') || line.includes('Informaci n del partido') ||
                                         line.includes('- Informacion del partido') || line.includes('Informacion del partido'))) {
@@ -3794,11 +3765,9 @@
                 
                 createAndAppendEventElement(event);
                 
-                // Si es una tarjeta roja, programar la aparición del icono 5 segundos después
                 if (event.type === 'redCard') {
                     setTimeout(() => {
                         redCardedPlayers.add(event.player);
-                        // Si la pestaña de alineaciones está activa y estamos en modo visual, re-renderizar
                         if (document.getElementById('lineups-tab').classList.contains('active') && visualLineupsMode) {
                             renderLineups();
                         }
@@ -3973,7 +3942,6 @@
                 const content = pre ? pre.textContent : text;
                 const lines = content.split('\n');
 
-                // Buscar línea con "Última actualización:"
                 for (let i = 0; i < lines.length; i++) {
                     const trimmed = lines[i].trim();
                     if (trimmed.toLowerCase().includes('última actualización:')) {
@@ -4598,13 +4566,9 @@
             return teamKey || null;
         }
         
-        // Detectar cambio de táctica MEJORADO:
         function detectTacticChange(line, currentPossessionTeam) {
             if (!currentPossessionTeam) return null;
-            
-            // Excluir específicamente el patrón "D nde"
             if (/D\s+nde/i.test(line)) return null;
-            
             const pattern = /(?:^|\s)([ACDELNPT])(?![_])(?:\.(?!\s+[A-Z]))?(?=\s|$)/;
             const match = line.match(pattern);
             if (match) {
@@ -4616,7 +4580,6 @@
             return null;
         }
 
-        // Actualizar la táctica mostrada en la interfaz
         function updateTeamTactic(teamName, newTactic) {
             if (teamName === homeTeamName) {
                 homeTactic = newTactic;
@@ -4687,12 +4650,10 @@
             }
         }
 
-        // Función mejorada para generar información meteorológica respetando personalización
         function generateWeatherInfo() {
             if (customWeather && customWeather.type) {
                 let temperature = customWeather.temperature;
                 if (temperature === undefined || isNaN(temperature)) {
-                    // Generar temperatura automática según el tipo
                     switch (customWeather.type) {
                         case 'Soleado':
                             temperature = Math.floor(Math.random() * (25 - 18 + 1)) + 18;
@@ -4938,7 +4899,6 @@
             }
         }
 
-        // Estilos unificados para los checkboxes de estadísticas (igual que "Sólo goles")
         const style = document.createElement('style');
         style.textContent = `
             .stats-highlight-container input {
@@ -5061,7 +5021,6 @@
             return `<img src="https://i.imgur.com/APb2Cru.png" class="captain-icon" style="width:14px; height:14px; vertical-align: middle; margin-left: 6px;" title="Capitán">`;
         }
 
-        // Función auxiliar para extraer la letra de la formación (ej. "4-3-2-1 A" → "A")
         function extractTacticLetter(formation) {
             if (!formation) return '';
             const parts = formation.trim().split(/\s+/);
@@ -5072,360 +5031,94 @@
             return '';
         }
 
-        // ──────────────────────────────────────────────────────────────
-        // FUNCIÓN PARA RENDERIZAR ALINEACIONES EN MODO VISUAL (con táctica dinámica y sustituciones, incluye icono de tarjeta roja)
-        // ──────────────────────────────────────────────────────────────
-        function renderVisualMode(homeStarters, awayStarters, homeSubs, awaySubs,
-                                  homeTeam, awayTeam, homeFormation, awayFormation,
-                                  homeManager, awayManager) {
-            const lineupsDiv = document.getElementById('lineups');
-            const order = ['GK', 'DF', 'DM', 'MF', 'AM', 'FW'];
-            const groupByPosition = (players) => {
-                const groups = { GK: [], DF: [], DM: [], MF: [], AM: [], FW: [] };
-                players.forEach(p => {
-                    if (groups[p.position]) groups[p.position].push(p);
-                });
-                return groups;
-            };
-            
-            const homeGroups = groupByPosition(homeStarters);
-            const awayGroups = groupByPosition(awayStarters);
-            
-            function getPlayerFaceUrl(playerName) {
-                const playerData = findPlayerByName(playerName);
-                if (playerData && facesDB[playerData.Name]) {
-                    return facesDB[playerData.Name];
+        // NUEVA FUNCIÓN PARA CAMBIAR POSICIÓN DE JUGADOR EN TIEMPO REAL
+        function checkAndChangePosition(currentRawLine, currentTeam) {
+            if (!currentRawLine) return false;
+            // Buscar palabras clave que indiquen cambio de posición
+            const lowerLine = currentRawLine.toLowerCase();
+            const posKeywords = ['gk', 'df', 'dm', 'mf', 'am', 'fw'];
+            let foundPosition = null;
+            for (let pk of posKeywords) {
+                // Buscar "de gk", "como dm", "en la posición de mf", "va a jugar de dm"
+                const regex = new RegExp(`(?:de|como|en la posici[oó]n de|jugar[aá] de)\\s+${pk}\\b`, 'i');
+                if (regex.test(lowerLine)) {
+                    foundPosition = pk.toUpperCase();
+                    break;
                 }
-                return facesDB['Unknown'] || 'https://2img.net/i.imgur.com/7Y9zAkb.png';
             }
-            function getPlayerFlagUrl(playerName) {
-                const playerData = findPlayerByName(playerName);
-                if (playerData && playerData.Nat) {
-                    const code = playerData.Nat.toLowerCase();
-                    return flagsDB[code] || '';
-                }
-                return '';
-            }
+            if (!foundPosition) return false;
             
-            function generatePitchRows(groups, teamSide) {
-                let rowsHtml = '';
-                order.forEach(pos => {
-                    const players = groups[pos];
-                    if (pos === 'AM' && players.length > 1) {
-                        if (players.length === 4) {
-                            rowsHtml += `<div class="pitch-row" style="justify-content: space-between; gap: 0; width: 100%;">`;
-                            rowsHtml += playerCardHTML(players[0], teamSide);
-                            rowsHtml += `<div style="display: flex; gap: 22px;">`;
-                            rowsHtml += playerCardHTML(players[1], teamSide);
-                            rowsHtml += playerCardHTML(players[2], teamSide);
-                            rowsHtml += `</div>`;
-                            rowsHtml += playerCardHTML(players[3], teamSide);
-                            rowsHtml += `</div>`;
-                        } else {
-                            rowsHtml += `<div class="pitch-row" style="justify-content: space-between; gap: 0; width: 100%;">`;
-                            players.forEach(p => { rowsHtml += playerCardHTML(p, teamSide); });
-                            rowsHtml += `</div>`;
-                        }
-                    } else {
-                        rowsHtml += `<div class="pitch-row">`;
-                        if (players.length === 0) {
-                            rowsHtml += `<div class="player-card" style="opacity:0;pointer-events:none;">
-                                            <div class="player-circle-vis" style="background:transparent;border-color:transparent;"></div>
-                                            <div class="player-info-vis" style="visibility:hidden;">---</div>
-                                         </div>`;
-                        } else {
-                            players.forEach(p => { rowsHtml += playerCardHTML(p, teamSide); });
-                        }
-                        rowsHtml += `</div>`;
-                    }
-                });
-                return rowsHtml;
-            }
+            // Buscar nombres de jugador en la línea
+            const tokens = currentRawLine.split(/\s+/).map(t => t.replace(/^[^\w]+|[^\w]+$/g, ''));
+            const playerCandidates = tokens.filter(t => playerNamesSet.has(t));
+            if (playerCandidates.length === 0) return false;
+            const playerName = playerCandidates[0]; // tomamos el primero encontrado
             
-            function playerCardHTML(player, teamSide) {
-                const faceUrl = getPlayerFaceUrl(player.name);
-                const flagUrl = getPlayerFlagUrl(player.name);
-                const formattedName = formatPlayerName(player.name);
-                const isCaptain = (teamSide === 'home' && homeCaptain === player.name) || (teamSide === 'away' && awayCaptain === player.name);
-                const posClass = (player.position || 'sub').toLowerCase();
-                const redCardIcon = redCardedPlayers.has(player.name) ? `<img src="https://i.imgur.com/scCFC2f.png" class="red-card-icon" alt="Tarjeta roja">` : '';
-                return `
-                    <div class="player-card" data-player-name="${player.name}" data-team="${teamSide}">
-                        <div class="player-circle-vis ${posClass}" style="background-image: url('${faceUrl}'); background-size: cover; background-position: center;" title="${player.position} – ${formattedName}">
-                            ${redCardIcon}
-                        </div>
-                        <div class="player-info-vis">
-                            ${flagUrl ? `<div class="player-flag-vis" style="background-image: url('${flagUrl}'); background-size: cover; width:14px; height:10px; display:inline-block;"></div>` : ''}
-                            <span>${formattedName}</span>
-                            ${isCaptain ? getCaptainIcon() : ''}
-                        </div>
-                    </div>
-                `;
-            }
-            
-            function generateBenchHTML(subs, teamSide) {
-                if (!subs.length) return '';
-                let html = `<div class="bench">
-                                <div class="bench-label">BANQUILLO</div>
-                                <div class="bench-container">`;
-                subs.forEach(sub => {
-                    const faceUrl = getPlayerFaceUrl(sub.name);
-                    const flagUrl = getPlayerFlagUrl(sub.name);
-                    const formattedName = formatPlayerName(sub.name);
-                    const isCaptain = (teamSide === 'home' && homeCaptain === sub.name) || (teamSide === 'away' && awayCaptain === sub.name);
-                    const posClass = (sub.position || 'sub').toLowerCase();
-                    const redCardIcon = redCardedPlayers.has(sub.name) ? `<img src="https://i.imgur.com/scCFC2f.png" class="red-card-icon" alt="Tarjeta roja">` : '';
-                    html += `
-                        <div class="substitute-card" data-player-name="${sub.name}" data-team="${teamSide}">
-                            <div class="player-circle-vis ${posClass}" style="background-image: url('${faceUrl}'); background-size: cover; background-position: center;">
-                                ${redCardIcon}
-                            </div>
-                            <div class="player-info-vis">
-                                ${flagUrl ? `<div class="player-flag-vis" style="background-image: url('${flagUrl}'); background-size: cover;"></div>` : ''}
-                                <span>${formattedName}</span>
-                                ${isCaptain ? getCaptainIcon() : ''}
-                            </div>
-                        </div>
-                    `;
-                });
-                html += `</div></div>`;
-                return html;
-            }
-            
-            const homeRows = generatePitchRows(homeGroups, 'home');
-            const awayRows = generatePitchRows(awayGroups, 'away');
-            const homeBenchHtml = generateBenchHTML(homeSubs, 'home');
-            const awayBenchHtml = generateBenchHTML(awaySubs, 'away');
-            
-            // Mostrar la letra de la táctica actual si existe
-            const homeDisplayTactic = homeTactic ? homeTactic : '';
-            const awayDisplayTactic = awayTactic ? awayTactic : '';
-            
-            const homeManagerImgHtml = homeManagerImage ? `<img src="${homeManagerImage}" class="manager-img" style="width:36px;height:36px;object-fit:cover;border-radius:4px;">` : '';
-            const awayManagerImgHtml = awayManagerImage ? `<img src="${awayManagerImage}" class="manager-img" style="width:36px;height:36px;object-fit:cover;border-radius:4px;">` : '';
-            
-            const html = `
-                <div class="pitch-visual-container">
-                    <div class="pitch-wrapper">
-                        <div class="team-banner">
-                            ${homeDisplayTactic ? `<div class="formation-vis">${homeDisplayTactic}</div>` : ''}
-                            ${homeManager ? `<div class="manager-vis">${homeManagerImgHtml} ${homeManager}</div>` : ''}
-                        </div>
-                        <div class="pitch-side">
-                            <div class="center-circle"></div>
-                            <div class="penalty-area home"></div>
-                            <div class="penalty-area away"></div>
-                            <div class="goal-area home"></div>
-                            <div class="goal-area away"></div>
-                            <div class="penalty-spot home"></div>
-                            <div class="penalty-spot away"></div>
-                            <div class="penalty-arc-top"></div>
-                            <div class="penalty-arc-bottom"></div>
-                            <div class="corner top-left"></div>
-                            <div class="corner top-right"></div>
-                            <div class="corner bottom-left"></div>
-                            <div class="corner bottom-right"></div>
-                            <div class="pitch-grid">${homeRows}</div>
-                        </div>
-                        ${homeBenchHtml}
-                    </div>
-                    <div class="pitch-wrapper">
-                        <div class="team-banner">
-                            ${awayDisplayTactic ? `<div class="formation-vis">${awayDisplayTactic}</div>` : ''}
-                            ${awayManager ? `<div class="manager-vis">${awayManagerImgHtml} ${awayManager}</div>` : ''}
-                        </div>
-                        <div class="pitch-side">
-                            <div class="center-circle"></div>
-                            <div class="penalty-area home"></div>
-                            <div class="penalty-area away"></div>
-                            <div class="goal-area home"></div>
-                            <div class="goal-area away"></div>
-                            <div class="penalty-spot home"></div>
-                            <div class="penalty-spot away"></div>
-                            <div class="penalty-arc-top"></div>
-                            <div class="penalty-arc-bottom"></div>
-                            <div class="corner top-left"></div>
-                            <div class="corner top-right"></div>
-                            <div class="corner bottom-left"></div>
-                            <div class="corner bottom-right"></div>
-                            <div class="pitch-grid">${awayRows}</div>
-                        </div>
-                        ${awayBenchHtml}
-                    </div>
-                </div>
-            `;
-            
-            lineupsDiv.innerHTML = html;
-            
-            // Agregar eventos de clic para mostrar popup en todas las cartas
-            const allCards = lineupsDiv.querySelectorAll('.player-card, .substitute-card');
-            allCards.forEach(card => {
-                const playerName = card.getAttribute('data-player-name');
-                if (!playerName) return;
-                const playerData = findPlayerByName(playerName);
-                card.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    if (playerData) showPlayerPopup(playerData);
-                    else alert(`No se encontraron datos para ${formatPlayerName(playerName)}`);
-                });
-            });
-        }
-        
-        // --- Función principal renderLineups (modo simple con táctica dinámica, modo visual con táctica y suplentes actualizados) ---
-        function renderLineups() {
-            if (!currentHomeStarters.length || !currentAwayStarters.length) return;
-            
-            populateCaptainSelects();
-            
-            if (visualLineupsMode) {
-                renderVisualMode(currentHomeStarters, currentAwayStarters,
-                                 currentHomeSubs, currentAwaySubs,
-                                 homeTeamName, awayTeamName,
-                                 window.homeFormation || '', window.awayFormation || '',
-                                 window.homeManager || '', window.awayManager || '');
+            // Determinar equipo del jugador
+            let targetStarters = null;
+            let targetSubs = null;
+            let isHome = false;
+            if (currentHomeStarters.some(p => p.name === playerName) || currentHomeSubs.some(p => p.name === playerName)) {
+                targetStarters = currentHomeStarters;
+                targetSubs = currentHomeSubs;
+                isHome = true;
+            } else if (currentAwayStarters.some(p => p.name === playerName) || currentAwaySubs.some(p => p.name === playerName)) {
+                targetStarters = currentAwayStarters;
+                targetSubs = currentAwaySubs;
+                isHome = false;
             } else {
-                // Modo por defecto (Simple)
-                const homeStartersData = currentHomeStarters.map(p => ({ name: p.name, position: p.position, element: null }));
-                const awayStartersData = currentAwayStarters.map(p => ({ name: p.name, position: p.position, element: null }));
-                const homeSubsData = currentHomeSubs.map(p => ({ name: p.name, position: p.position, element: null }));
-                const awaySubsData = currentAwaySubs.map(p => ({ name: p.name, position: p.position, element: null }));
-                const homeManager = window.homeManager || '';
-                const awayManager = window.awayManager || '';
-                const homeKeyPlayers = window.homeKeyPlayers || { topScorer: null, topAssister: null, star: null };
-                const awayKeyPlayers = window.awayKeyPlayers || { topScorer: null, topAssister: null, star: null };
-                
-                const homeDisplayTactic = homeTactic ? homeTactic : '';
-                const awayDisplayTactic = awayTactic ? awayTactic : '';
-                
-                function rebuildPlayerList(playersData, teamSide) {
-                    const ul = document.createElement('ul');
-                    ul.className = 'starters';
-                    playersData.forEach(p => {
-                        const li = document.createElement('li');
-                        const playerData = findPlayerByName(p.name);
-                        let flagHtml = '';
-                        if (playerData && playerData.Nat) {
-                            const flagCode = playerData.Nat.toLowerCase();
-                            const flagUrl = flagsDB[flagCode];
-                            if (flagUrl) flagHtml = `<img src="${flagUrl}" alt="${playerData.Nat}" class="player-flag">`;
-                        }
-                        const isCaptain = (teamSide === 'home' && homeCaptain === p.name) || (teamSide === 'away' && awayCaptain === p.name);
-                        li.innerHTML = `<span class="pos-circle ${p.position.toLowerCase()}">${p.position}</span>${flagHtml}<span class="player-name">${formatPlayerName(p.name)}</span>${isCaptain ? getCaptainIcon() : ''}`;
-                        if (playerData) {
-                            li.onclick = function(e) { e.stopPropagation(); showPlayerPopup(playerData); };
-                        } else {
-                            li.onclick = function(e) { e.stopPropagation(); const found = findPlayerByName(p.name); if (found) showPlayerPopup(found); else alert(`No se encontraron datos para ${formatPlayerName(p.name)}`); };
-                        }
-                        ul.appendChild(li);
-                    });
-                    return ul;
-                }
-                
-                function rebuildSubsList(subsData, teamSide) {
-                    const ul = document.createElement('ul');
-                    ul.className = 'subs';
-                    subsData.forEach(p => {
-                        const li = document.createElement('li');
-                        const playerData = findPlayerByName(p.name);
-                        let flagHtml = '';
-                        if (playerData && playerData.Nat) {
-                            const flagCode = playerData.Nat.toLowerCase();
-                            const flagUrl = flagsDB[flagCode];
-                            if (flagUrl) flagHtml = `<img src="${flagUrl}" alt="${playerData.Nat}" class="player-flag">`;
-                        }
-                        const isCaptain = (teamSide === 'home' && homeCaptain === p.name) || (teamSide === 'away' && awayCaptain === p.name);
-                        li.innerHTML = `${formatPlayerName(p.name)} ${flagHtml}<span class="pos-circle sub">SUB</span>${isCaptain ? getCaptainIcon() : ''}`;
-                        if (playerData) {
-                            li.onclick = function(e) { e.stopPropagation(); showPlayerPopup(playerData); };
-                        } else {
-                            li.onclick = function(e) { e.stopPropagation(); const found = findPlayerByName(p.name); if (found) showPlayerPopup(found); else alert(`No se encontraron datos para ${formatPlayerName(p.name)}`); };
-                        }
-                        ul.appendChild(li);
-                    });
-                    return ul;
-                }
-                
-                const lineupsDiv = document.getElementById('lineups');
-                const homeManagerImgHtml = homeManagerImage ? `<img src="${homeManagerImage}" class="manager-img">` : '';
-                const awayManagerImgHtml = awayManagerImage ? `<img src="${awayManagerImage}" class="manager-img">` : '';
-                lineupsDiv.innerHTML = `
-                    <div class="team-section">
-                        ${homeDisplayTactic ? `<div class="formation">${homeDisplayTactic}</div>` : ''}
-                        <div class="manager">${homeManagerImgHtml} ${homeManager}</div>
-                        <div class="lineup-container">
-                            <div class="starters-placeholder"></div>
-                            <div class="right-column">
-                                <h4 class="right-align" style="margin:0 0 5px 0;">Suplentes</h4>
-                                <div class="subs-placeholder"></div>
-                                <button class="view-field-btn" onclick="showFieldModal('home')">Ver campo</button>
-                                <div class="key-players">
-                                    <h4>Jugadores clave</h4>
-                                    <ul>
-                                        <li>Máximo artillero: ${homeKeyPlayers.topScorer ? formatPlayerName(homeKeyPlayers.topScorer.Name) : 'N/A'}</li>
-                                        <li>Máximo asistente: ${homeKeyPlayers.topAssister ? formatPlayerName(homeKeyPlayers.topAssister.Name) : 'N/A'}</li>
-                                        <li>La estrella: ${homeKeyPlayers.star ? formatPlayerName(homeKeyPlayers.star.Name) : 'N/A'}</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="team-section">
-                        ${awayDisplayTactic ? `<div class="formation">${awayDisplayTactic}</div>` : ''}
-                        <div class="manager">${awayManagerImgHtml} ${awayManager}</div>
-                        <div class="lineup-container">
-                            <div class="starters-placeholder"></div>
-                            <div class="right-column">
-                                <h4 class="right-align" style="margin:0 0 5px 0;">Suplentes</h4>
-                                <div class="subs-placeholder"></div>
-                                <button class="view-field-btn" onclick="showFieldModal('away')">Ver campo</button>
-                                <div class="key-players">
-                                    <h4>Jugadores clave</h4>
-                                    <ul>
-                                        <li>Máximo artillero: ${awayKeyPlayers.topScorer ? formatPlayerName(awayKeyPlayers.topScorer.Name) : 'N/A'}</li>
-                                        <li>Máximo asistente: ${awayKeyPlayers.topAssister ? formatPlayerName(awayKeyPlayers.topAssister.Name) : 'N/A'}</li>
-                                        <li>La estrella: ${awayKeyPlayers.star ? formatPlayerName(awayKeyPlayers.star.Name) : 'N/A'}</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                const homeStartersContainer = lineupsDiv.querySelector('.team-section:first-child .starters-placeholder');
-                const homeSubsContainer = lineupsDiv.querySelector('.team-section:first-child .subs-placeholder');
-                const awayStartersContainer = lineupsDiv.querySelector('.team-section:last-child .starters-placeholder');
-                const awaySubsContainer = lineupsDiv.querySelector('.team-section:last-child .subs-placeholder');
-                
-                homeStartersContainer.appendChild(rebuildPlayerList(homeStartersData, 'home'));
-                awayStartersContainer.appendChild(rebuildPlayerList(awayStartersData, 'away'));
-                homeSubsContainer.appendChild(rebuildSubsList(homeSubsData, 'home'));
-                awaySubsContainer.appendChild(rebuildSubsList(awaySubsData, 'away'));
+                return false;
             }
-            toggleAlternateColorsFieldButtons();
+            
+            // Solo si el equipo coincide con el que tiene la posesión actual (currentTeam)
+            const playerTeamName = isHome ? homeTeamName : awayTeamName;
+            if (currentTeam !== playerTeamName) return false;
+            
+            // Actualizar posición si el jugador está en titulares
+            let updated = false;
+            for (let p of targetStarters) {
+                if (p.name === playerName && p.position !== foundPosition) {
+                    p.position = foundPosition;
+                    updated = true;
+                    break;
+                }
+            }
+            if (!updated) {
+                for (let p of targetSubs) {
+                    if (p.name === playerName && p.position !== foundPosition) {
+                        p.position = foundPosition;
+                        updated = true;
+                        break;
+                    }
+                }
+            }
+            if (updated) {
+                if (document.getElementById('lineups-tab').classList.contains('active')) {
+                    renderLineups();
+                }
+                return true;
+            }
+            return false;
         }
-        
-        // --- FUNCIÓN MEJORADA PARA DETECTAR Y APLICAR SUSTITUCIONES ---
-        // Ahora acepta cualquier formato de nombre (con o sin guiones bajos)
-        // y solo aplica el cambio si los jugadores pertenecen al equipo que posee el balón.
+
+        // Funciones para sustituciones (ya existentes)
+        function extractPlayerNamesFromLine(line) {
+            const tokens = line.split(/\s+/).map(t => t.replace(/^[^\w]+|[^\w]+$/g, ''));
+            return tokens.filter(t => playerNamesSet.has(t));
+        }
+
+        let previousRawLineSub = null;
         function checkAndApplySubstitution(currentRawLine, previousRawLine, currentTeam) {
             if (!currentRawLine) return false;
-            
-            // Extraer tokens que sean nombres de jugador (según el conjunto global)
-            function extractPlayerNamesFromLine(line) {
-                const tokens = line.split(/\s+/).map(t => t.replace(/^[^\w]+|[^\w]+$/g, '')); // quitar puntuación
-                return tokens.filter(t => playerNamesSet.has(t));
-            }
-            
             const currentTokens = extractPlayerNamesFromLine(currentRawLine);
             const prevTokens = previousRawLine ? extractPlayerNamesFromLine(previousRawLine) : [];
             const allTokens = [...new Set([...currentTokens, ...prevTokens])];
-            
             if (allTokens.length < 2) return false;
             
-            // Determinar a qué equipo pertenecen todos los tokens (deben ser del mismo)
             let teamSide = null;
             for (let token of allTokens) {
                 if (currentHomeStarters.some(p => p.name === token) || currentHomeSubs.some(p => p.name === token)) {
-                    if (teamSide === 'away') return false; // mezcla de equipos
+                    if (teamSide === 'away') return false;
                     teamSide = 'home';
                 } else if (currentAwayStarters.some(p => p.name === token) || currentAwaySubs.some(p => p.name === token)) {
                     if (teamSide === 'home') return false;
@@ -5433,8 +5126,6 @@
                 }
             }
             if (!teamSide) return false;
-            
-            // Solo se permite si el equipo actual (posesión) coincide
             if (currentTeam !== (teamSide === 'home' ? homeTeamName : awayTeamName)) return false;
             
             const starters = teamSide === 'home' ? currentHomeStarters : currentAwayStarters;
@@ -5451,8 +5142,6 @@
                 }
             }
             if (!starterOut || !subIn) return false;
-            
-            // Evitar intercambios repetidos entre el mismo par
             const pairKey = [starterOut, subIn].sort().join('|');
             if (substitutedPairs.has(pairKey)) return false;
             
@@ -5475,14 +5164,16 @@
             }
             return false;
         }
-        
-        let previousRawLine = null;
-        function processSubstitutions(currentFormattedLine, currentRawLine, currentTeam) {
+
+        function processSubstitutionsAndPosition(currentFormattedLine, currentRawLine, currentTeam) {
             if (!currentRawLine) return;
-            checkAndApplySubstitution(currentRawLine, previousRawLine, currentTeam);
-            previousRawLine = currentRawLine;
+            // verificar cambio de posición
+            checkAndChangePosition(currentRawLine, currentTeam);
+            // verificar sustitución
+            checkAndApplySubstitution(currentRawLine, previousRawLineSub, currentTeam);
+            previousRawLineSub = currentRawLine;
         }
-        
+
         // Aplicar configuración
         function applySettings() {
             const fontFamily = document.getElementById('fontFamily').value;
@@ -5509,6 +5200,16 @@
             const awayCaptainSelect = document.getElementById('awayCaptainSelect');
             homeCaptain = homeCaptainSelect.value || null;
             awayCaptain = awayCaptainSelect.value || null;
+            
+            // Actualizar nombres de entrenadores
+            const homeManagerNameInput = document.getElementById('homeManagerNameInput').value.trim();
+            const awayManagerNameInput = document.getElementById('awayManagerNameInput').value.trim();
+            if (homeManagerNameInput !== "") {
+                window.homeManager = homeManagerNameInput;
+            }
+            if (awayManagerNameInput !== "") {
+                window.awayManager = awayManagerNameInput;
+            }
             
             if (document.getElementById('lineups-tab').classList.contains('active') && currentHomeStarters.length) {
                 renderLineups();
@@ -5671,16 +5372,13 @@
             }
         });
 
-        // Función para actualizar el marcador con animación glow
         function updateScoreDisplay(newScore) {
             const scoreEl = document.getElementById('score');
-            if (scoreEl.textContent === newScore) return; // no hay cambio
+            if (scoreEl.textContent === newScore) return;
             scoreEl.textContent = newScore;
-            // Remover clase anterior si existe y reiniciar animación
             scoreEl.classList.remove('score-glow');
-            void scoreEl.offsetWidth; // forzar reflow
+            void scoreEl.offsetWidth;
             scoreEl.classList.add('score-glow');
-            // Limpiar tiempo anterior y programar remoción de la clase
             if (scoreGlowTimeout) clearTimeout(scoreGlowTimeout);
             scoreGlowTimeout = setTimeout(() => {
                 scoreEl.classList.remove('score-glow');
@@ -5842,6 +5540,10 @@
             document.getElementById('homeManagerFile').value = '';
             document.getElementById('awayManagerFile').value = '';
             
+            // Cargar nombres actuales de entrenadores en los inputs de texto
+            if (window.homeManager) document.getElementById('homeManagerNameInput').value = window.homeManager;
+            if (window.awayManager) document.getElementById('awayManagerNameInput').value = window.awayManager;
+            
             document.getElementById('settings-popup').style.display = 'block';
             document.getElementById('settings-popup-overlay').style.display = 'block';
         };
@@ -5887,27 +5589,13 @@
             const dateMatch = fullHeader.match(/\(([^)]+)\)/);
             let date = dateMatch ? dateMatch[1] : '';
             const dayMap = {
-                'Sun': 'Dom',
-                'Mon': 'Lun',
-                'Tue': 'Mar',
-                'Wed': 'Mié',
-                'Thu': 'Jue',
-                'Fri': 'Vie',
-                'Sat': 'Sáb'
+                'Sun': 'Dom', 'Mon': 'Lun', 'Tue': 'Mar', 'Wed': 'Mié',
+                'Thu': 'Jue', 'Fri': 'Vie', 'Sat': 'Sáb'
             };
             const monthMap = {
-                'Jan': 'ene',
-                'Feb': 'feb',
-                'Mar': 'mar',
-                'Apr': 'abr',
-                'May': 'may',
-                'Jun': 'jun',
-                'Jul': 'jul',
-                'Aug': 'ago',
-                'Sep': 'sep',
-                'Oct': 'oct',
-                'Nov': 'nov',
-                'Dec': 'dic'
+                'Jan': 'ene', 'Feb': 'feb', 'Mar': 'mar', 'Apr': 'abr',
+                'May': 'may', 'Jun': 'jun', 'Jul': 'jul', 'Aug': 'ago',
+                'Sep': 'sep', 'Oct': 'oct', 'Nov': 'nov', 'Dec': 'dic'
             };
             const dateParts = date.split(' ');
             if (dateParts.length === 3) {
@@ -5951,7 +5639,6 @@
             homeTeamName = homeTeam || homeTeamConfirm;
             awayTeamName = awayTeam || awayTeamConfirm;
             
-            // Extraer la letra de la táctica de las formaciones iniciales
             homeTactic = extractTacticLetter(homeFormation);
             awayTactic = extractTacticLetter(awayFormation);
             
@@ -6019,13 +5706,11 @@
             let homeSubsData = lineupLines.slice(11, 16).map(l => processPlayerLineup(l, true, false));
             let awaySubsData = lineupLines.slice(11, 16).map(l => processPlayerLineup(l, false, false));
             
-            // Inicializar las listas actuales de titulares y suplentes
             currentHomeStarters = homeStartersData.map(d => ({ name: d.name, position: d.position }));
             currentAwayStarters = awayStartersData.map(d => ({ name: d.name, position: d.position }));
             currentHomeSubs = homeSubsData.map(d => ({ name: d.name, position: d.position }));
             currentAwaySubs = awaySubsData.map(d => ({ name: d.name, position: d.position }));
             
-            // Construir el conjunto global de nombres de jugador
             playerNamesSet = new Set();
             currentHomeStarters.forEach(p => playerNamesSet.add(p.name));
             currentAwayStarters.forEach(p => playerNamesSet.add(p.name));
@@ -6037,7 +5722,6 @@
             window.homeManager = homeManager;
             window.awayManager = awayManager;
             
-            // Guardar datos originales para reset
             window.homeStartersData = homeStartersData;
             window.awayStartersData = awayStartersData;
             window.homeSubsData = homeSubsData;
@@ -6048,22 +5732,17 @@
                 if (players.length === 0) return { topScorer: null, topAssister: null, star: null };
 
                 const topScorer = players.reduce((max, p) => parseInt(p.Gls) > parseInt(max.Gls) ? p : max, players[0]);
-
                 const topAssister = players.reduce((max, p) => parseInt(p.Ass) > parseInt(max.Ass) ? p : max, players[0]);
-
                 function getPrimaryAttr(player) {
                   return Math.max(parseInt(player.St), parseInt(player.Tk), parseInt(player.Ps), parseInt(player.Sh));
                 }
-
                 function getSecondarySum(player, primary) {
                   const attrs = [parseInt(player.St), parseInt(player.Tk), parseInt(player.Ps), parseInt(player.Sh)];
                   return attrs.reduce((sum, attr) => sum + attr, 0) - primary;
                 }
-
                 let star = players[0];
                 let maxPrimary = getPrimaryAttr(star);
                 let maxSecondary = getSecondarySum(star, maxPrimary);
-
                 players.forEach(p => {
                   const primary = getPrimaryAttr(p);
                   if (primary > maxPrimary || (primary === maxPrimary && getSecondarySum(p, primary) > maxSecondary)) {
@@ -6072,7 +5751,6 @@
                     maxSecondary = getSecondarySum(p, primary);
                   }
                 });
-
                 return { topScorer, topAssister, star };
             }
 
@@ -6118,9 +5796,8 @@
                 }
             }
 
-            // Guardar líneas originales sin formatear para las sustituciones
             const rawNarrationSlice = lines.slice(narrationStart, narrationEnd);
-            originalNarrationLines = rawNarrationSlice.slice(); // copia sin formatear
+            originalNarrationLines = rawNarrationSlice.slice();
             
             narrationLines = rawNarrationSlice.map(line => {
                 return line.replace(/\b[A-Za-z]+(?:_[A-Za-z]+)+\b/g, match => formatPlayerName(match)).replace(/@/g, '');
@@ -6189,8 +5866,9 @@
             prevAwayGoals = 0;
             displayedEvents.clear();
             recentPlays = [];
-            // Reiniciar el conjunto de expulsados y cualquier timeout pendiente de icono
             redCardedPlayers.clear();
+            substitutedPairs.clear();
+            previousRawLineSub = null;
             updatePossessionBar();
             document.getElementById('pauseButton').textContent = 'Pausar';
             document.getElementById('minute').textContent = 'Minuto 0';
@@ -6202,10 +5880,6 @@
             narrationDiv.className = '';
             
             applyNarrationStyles();
-            
-            // Reiniciar registro de pares intercambiados
-            substitutedPairs.clear();
-            previousRawLine = null;
 
             showNextLine = function() {
                 if (isPaused) return;
@@ -6219,7 +5893,6 @@
                         return;
                     }
                     
-                    // Procesar sustituciones (ahora también en líneas de minuto)
                     if (line.includes('Minuto de juego')) {
                         const minMatch = line.match(/Minuto de juego\s+(\d+)/);
                         if (minMatch) {
@@ -6235,14 +5908,12 @@
                             if (recentPlays.length > 10) recentPlays.shift();
                             updatePossessionBar();
                             
-                            // Detectar cambio de táctica
                             const tacticChange = detectTacticChange(line, currentTeamColor);
                             if (tacticChange) {
                                 updateTeamTactic(tacticChange.team, tacticChange.tactic);
                             }
                         }
-                        // Llamar a la detección de sustituciones para la línea de minuto
-                        processSubstitutions(line, rawLine, detectedTeam);
+                        processSubstitutionsAndPosition(line, rawLine, detectedTeam);
 
                         const colonIndex = line.indexOf(':');
                         if (colonIndex !== -1) {
@@ -6269,8 +5940,7 @@
                         return;
                     }
                     
-                    // Para el resto de líneas
-                    processSubstitutions(line, rawLine, currentTeamColor);
+                    processSubstitutionsAndPosition(line, rawLine, currentTeamColor);
                     
                     if (line.includes('FINAL')) {
                         document.getElementById('minute').textContent = 'Finalizado';
@@ -6382,31 +6052,26 @@
             recentPlays = [];
             updatePossessionBar();
             playerStats = null;
-            // Limpiar el glow del marcador
             const scoreEl = document.getElementById('score');
             scoreEl.classList.remove('score-glow');
             if (scoreGlowTimeout) clearTimeout(scoreGlowTimeout);
-            // Restaurar la letra de la táctica desde la formación original
             homeTactic = extractTacticLetter(window.homeFormation || '');
             awayTactic = extractTacticLetter(window.awayFormation || '');
-            // Restaurar las alineaciones a las originales
             if (window.homeStartersData && window.awayStartersData && window.homeSubsData && window.awaySubsData) {
                 currentHomeStarters = window.homeStartersData.map(d => ({ name: d.name, position: d.position }));
                 currentAwayStarters = window.awayStartersData.map(d => ({ name: d.name, position: d.position }));
                 currentHomeSubs = window.homeSubsData.map(d => ({ name: d.name, position: d.position }));
                 currentAwaySubs = window.awaySubsData.map(d => ({ name: d.name, position: d.position }));
             }
-            // Reconstruir el conjunto de nombres
             playerNamesSet = new Set();
             currentHomeStarters.forEach(p => playerNamesSet.add(p.name));
             currentAwayStarters.forEach(p => playerNamesSet.add(p.name));
             currentHomeSubs.forEach(p => playerNamesSet.add(p.name));
             currentAwaySubs.forEach(p => playerNamesSet.add(p.name));
             
-            // Limpiar registro de sustituciones aplicadas
             substitutedPairs.clear();
-            previousRawLine = null;
-            redCardedPlayers.clear(); // limpiar tarjetas rojas
+            previousRawLineSub = null;
+            redCardedPlayers.clear();
             
             document.getElementById('pauseButton').textContent = 'Pausar';
             document.getElementById('score').textContent = '0 - 0';
@@ -6458,7 +6123,6 @@
                     continue;
                 }
                 
-                // Actualizar equipo actual si es una línea de minuto
                 if (line.includes('Minuto de juego')) {
                     const detectedTeam = detectTeamFromNarration(line);
                     if (detectedTeam) {
@@ -6469,8 +6133,7 @@
                     if (minMatch) currentMinute = parseInt(minMatch[1]);
                 }
                 
-                // Procesar sustituciones con el equipo actual
-                processSubstitutions(line, rawLine, currentTeamFF);
+                processSubstitutionsAndPosition(line, rawLine, currentTeamFF);
 
                 const scoreRegex = /\b(\d+-\d+)\b/;
                 const scoreMatch = line.match(scoreRegex);
@@ -6518,6 +6181,331 @@
 
             narrationDiv.textContent = 'FINAL DEL PARTIDO';
             document.getElementById('minute').textContent = 'Finalizado';
+        }
+
+        // Función renderLineups mejorada para incluir nombres personalizados y tácticas
+        function renderLineups() {
+            if (!currentHomeStarters.length || !currentAwayStarters.length) return;
+            
+            populateCaptainSelects();
+            
+            if (visualLineupsMode) {
+                renderVisualMode(currentHomeStarters, currentAwayStarters,
+                                 currentHomeSubs, currentAwaySubs,
+                                 homeTeamName, awayTeamName,
+                                 window.homeFormation || '', window.awayFormation || '',
+                                 window.homeManager || '', window.awayManager || '');
+            } else {
+                const homeStartersData = currentHomeStarters.map(p => ({ name: p.name, position: p.position, element: null }));
+                const awayStartersData = currentAwayStarters.map(p => ({ name: p.name, position: p.position, element: null }));
+                const homeSubsData = currentHomeSubs.map(p => ({ name: p.name, position: p.position, element: null }));
+                const awaySubsData = currentAwaySubs.map(p => ({ name: p.name, position: p.position, element: null }));
+                const homeManager = window.homeManager || '';
+                const awayManager = window.awayManager || '';
+                const homeKeyPlayers = window.homeKeyPlayers || { topScorer: null, topAssister: null, star: null };
+                const awayKeyPlayers = window.awayKeyPlayers || { topScorer: null, topAssister: null, star: null };
+                
+                const homeDisplayTactic = homeTactic ? homeTactic : '';
+                const awayDisplayTactic = awayTactic ? awayTactic : '';
+                
+                function rebuildPlayerList(playersData, teamSide) {
+                    const ul = document.createElement('ul');
+                    ul.className = 'starters';
+                    playersData.forEach(p => {
+                        const li = document.createElement('li');
+                        const playerData = findPlayerByName(p.name);
+                        let flagHtml = '';
+                        if (playerData && playerData.Nat) {
+                            const flagCode = playerData.Nat.toLowerCase();
+                            const flagUrl = flagsDB[flagCode];
+                            if (flagUrl) flagHtml = `<img src="${flagUrl}" alt="${playerData.Nat}" class="player-flag">`;
+                        }
+                        const isCaptain = (teamSide === 'home' && homeCaptain === p.name) || (teamSide === 'away' && awayCaptain === p.name);
+                        li.innerHTML = `<span class="pos-circle ${p.position.toLowerCase()}">${p.position}</span>${flagHtml}<span class="player-name">${formatPlayerName(p.name)}</span>${isCaptain ? getCaptainIcon() : ''}`;
+                        if (playerData) {
+                            li.onclick = function(e) { e.stopPropagation(); showPlayerPopup(playerData); };
+                        } else {
+                            li.onclick = function(e) { e.stopPropagation(); const found = findPlayerByName(p.name); if (found) showPlayerPopup(found); else alert(`No se encontraron datos para ${formatPlayerName(p.name)}`); };
+                        }
+                        ul.appendChild(li);
+                    });
+                    return ul;
+                }
+                
+                function rebuildSubsList(subsData, teamSide) {
+                    const ul = document.createElement('ul');
+                    ul.className = 'subs';
+                    subsData.forEach(p => {
+                        const li = document.createElement('li');
+                        const playerData = findPlayerByName(p.name);
+                        let flagHtml = '';
+                        if (playerData && playerData.Nat) {
+                            const flagCode = playerData.Nat.toLowerCase();
+                            const flagUrl = flagsDB[flagCode];
+                            if (flagUrl) flagHtml = `<img src="${flagUrl}" alt="${playerData.Nat}" class="player-flag">`;
+                        }
+                        const isCaptain = (teamSide === 'home' && homeCaptain === p.name) || (teamSide === 'away' && awayCaptain === p.name);
+                        li.innerHTML = `${formatPlayerName(p.name)} ${flagHtml}<span class="pos-circle sub">SUB</span>${isCaptain ? getCaptainIcon() : ''}`;
+                        if (playerData) {
+                            li.onclick = function(e) { e.stopPropagation(); showPlayerPopup(playerData); };
+                        } else {
+                            li.onclick = function(e) { e.stopPropagation(); const found = findPlayerByName(p.name); if (found) showPlayerPopup(found); else alert(`No se encontraron datos para ${formatPlayerName(p.name)}`); };
+                        }
+                        ul.appendChild(li);
+                    });
+                    return ul;
+                }
+                
+                const lineupsDiv = document.getElementById('lineups');
+                const homeManagerImgHtml = homeManagerImage ? `<img src="${homeManagerImage}" class="manager-img">` : '';
+                const awayManagerImgHtml = awayManagerImage ? `<img src="${awayManagerImage}" class="manager-img">` : '';
+                lineupsDiv.innerHTML = `
+                    <div class="team-section">
+                        ${homeDisplayTactic ? `<div class="formation">${homeDisplayTactic}</div>` : ''}
+                        <div class="manager">${homeManagerImgHtml} ${homeManager}</div>
+                        <div class="lineup-container">
+                            <div class="starters-placeholder"></div>
+                            <div class="right-column">
+                                <h4 class="right-align" style="margin:0 0 5px 0;">Suplentes</h4>
+                                <div class="subs-placeholder"></div>
+                                <button class="view-field-btn" onclick="showFieldModal('home')">Ver campo</button>
+                                <div class="key-players">
+                                    <h4>Jugadores clave</h4>
+                                    <ul>
+                                        <li>Máximo artillero: ${homeKeyPlayers.topScorer ? formatPlayerName(homeKeyPlayers.topScorer.Name) : 'N/A'}</li>
+                                        <li>Máximo asistente: ${homeKeyPlayers.topAssister ? formatPlayerName(homeKeyPlayers.topAssister.Name) : 'N/A'}</li>
+                                        <li>La estrella: ${homeKeyPlayers.star ? formatPlayerName(homeKeyPlayers.star.Name) : 'N/A'}</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="team-section">
+                        ${awayDisplayTactic ? `<div class="formation">${awayDisplayTactic}</div>` : ''}
+                        <div class="manager">${awayManagerImgHtml} ${awayManager}</div>
+                        <div class="lineup-container">
+                            <div class="starters-placeholder"></div>
+                            <div class="right-column">
+                                <h4 class="right-align" style="margin:0 0 5px 0;">Suplentes</h4>
+                                <div class="subs-placeholder"></div>
+                                <button class="view-field-btn" onclick="showFieldModal('away')">Ver campo</button>
+                                <div class="key-players">
+                                    <h4>Jugadores clave</h4>
+                                    <ul>
+                                        <li>Máximo artillero: ${awayKeyPlayers.topScorer ? formatPlayerName(awayKeyPlayers.topScorer.Name) : 'N/A'}</li>
+                                        <li>Máximo asistente: ${awayKeyPlayers.topAssister ? formatPlayerName(awayKeyPlayers.topAssister.Name) : 'N/A'}</li>
+                                        <li>La estrella: ${awayKeyPlayers.star ? formatPlayerName(awayKeyPlayers.star.Name) : 'N/A'}</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                const homeStartersContainer = lineupsDiv.querySelector('.team-section:first-child .starters-placeholder');
+                const homeSubsContainer = lineupsDiv.querySelector('.team-section:first-child .subs-placeholder');
+                const awayStartersContainer = lineupsDiv.querySelector('.team-section:last-child .starters-placeholder');
+                const awaySubsContainer = lineupsDiv.querySelector('.team-section:last-child .subs-placeholder');
+                
+                homeStartersContainer.appendChild(rebuildPlayerList(homeStartersData, 'home'));
+                awayStartersContainer.appendChild(rebuildPlayerList(awayStartersData, 'away'));
+                homeSubsContainer.appendChild(rebuildSubsList(homeSubsData, 'home'));
+                awaySubsContainer.appendChild(rebuildSubsList(awaySubsData, 'away'));
+            }
+            toggleAlternateColorsFieldButtons();
+        }
+
+        function renderVisualMode(homeStarters, awayStarters, homeSubs, awaySubs,
+                                  homeTeam, awayTeam, homeFormation, awayFormation,
+                                  homeManager, awayManager) {
+            const lineupsDiv = document.getElementById('lineups');
+            const order = ['GK', 'DF', 'DM', 'MF', 'AM', 'FW'];
+            const groupByPosition = (players) => {
+                const groups = { GK: [], DF: [], DM: [], MF: [], AM: [], FW: [] };
+                players.forEach(p => {
+                    if (groups[p.position]) groups[p.position].push(p);
+                });
+                return groups;
+            };
+            
+            const homeGroups = groupByPosition(homeStarters);
+            const awayGroups = groupByPosition(awayStarters);
+            
+            function getPlayerFaceUrl(playerName) {
+                const playerData = findPlayerByName(playerName);
+                if (playerData && facesDB[playerData.Name]) {
+                    return facesDB[playerData.Name];
+                }
+                return facesDB['Unknown'] || 'https://2img.net/i.imgur.com/7Y9zAkb.png';
+            }
+            function getPlayerFlagUrl(playerName) {
+                const playerData = findPlayerByName(playerName);
+                if (playerData && playerData.Nat) {
+                    const code = playerData.Nat.toLowerCase();
+                    return flagsDB[code] || '';
+                }
+                return '';
+            }
+            
+            function generatePitchRows(groups, teamSide) {
+                let rowsHtml = '';
+                order.forEach(pos => {
+                    const players = groups[pos];
+                    if (pos === 'AM' && players.length > 1) {
+                        if (players.length === 4) {
+                            rowsHtml += `<div class="pitch-row" style="justify-content: space-between; gap: 0; width: 100%;">`;
+                            rowsHtml += playerCardHTML(players[0], teamSide);
+                            rowsHtml += `<div style="display: flex; gap: 22px;">`;
+                            rowsHtml += playerCardHTML(players[1], teamSide);
+                            rowsHtml += playerCardHTML(players[2], teamSide);
+                            rowsHtml += `</div>`;
+                            rowsHtml += playerCardHTML(players[3], teamSide);
+                            rowsHtml += `</div>`;
+                        } else {
+                            rowsHtml += `<div class="pitch-row" style="justify-content: space-between; gap: 0; width: 100%;">`;
+                            players.forEach(p => { rowsHtml += playerCardHTML(p, teamSide); });
+                            rowsHtml += `</div>`;
+                        }
+                    } else {
+                        rowsHtml += `<div class="pitch-row">`;
+                        if (players.length === 0) {
+                            rowsHtml += `<div class="player-card" style="opacity:0;pointer-events:none;">
+                                            <div class="player-circle-vis" style="background:transparent;border-color:transparent;"></div>
+                                            <div class="player-info-vis" style="visibility:hidden;">---</div>
+                                         </div>`;
+                        } else {
+                            players.forEach(p => { rowsHtml += playerCardHTML(p, teamSide); });
+                        }
+                        rowsHtml += `</div>`;
+                    }
+                });
+                return rowsHtml;
+            }
+            
+            function playerCardHTML(player, teamSide) {
+                const faceUrl = getPlayerFaceUrl(player.name);
+                const flagUrl = getPlayerFlagUrl(player.name);
+                const formattedName = formatPlayerName(player.name);
+                const isCaptain = (teamSide === 'home' && homeCaptain === player.name) || (teamSide === 'away' && awayCaptain === player.name);
+                const posClass = (player.position || 'sub').toLowerCase();
+                const redCardIcon = redCardedPlayers.has(player.name) ? `<img src="https://i.imgur.com/scCFC2f.png" class="red-card-icon" alt="Tarjeta roja">` : '';
+                return `
+                    <div class="player-card" data-player-name="${player.name}" data-team="${teamSide}">
+                        <div class="player-circle-vis ${posClass}" style="background-image: url('${faceUrl}'); background-size: cover; background-position: center;" title="${player.position} – ${formattedName}">
+                            ${redCardIcon}
+                        </div>
+                        <div class="player-info-vis">
+                            ${flagUrl ? `<div class="player-flag-vis" style="background-image: url('${flagUrl}'); background-size: cover; width:14px; height:10px; display:inline-block;"></div>` : ''}
+                            <span>${formattedName}</span>
+                            ${isCaptain ? getCaptainIcon() : ''}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            function generateBenchHTML(subs, teamSide) {
+                if (!subs.length) return '';
+                let html = `<div class="bench">
+                                <div class="bench-label">BANQUILLO</div>
+                                <div class="bench-container">`;
+                subs.forEach(sub => {
+                    const faceUrl = getPlayerFaceUrl(sub.name);
+                    const flagUrl = getPlayerFlagUrl(sub.name);
+                    const formattedName = formatPlayerName(sub.name);
+                    const isCaptain = (teamSide === 'home' && homeCaptain === sub.name) || (teamSide === 'away' && awayCaptain === sub.name);
+                    const posClass = (sub.position || 'sub').toLowerCase();
+                    const redCardIcon = redCardedPlayers.has(sub.name) ? `<img src="https://i.imgur.com/scCFC2f.png" class="red-card-icon" alt="Tarjeta roja">` : '';
+                    html += `
+                        <div class="substitute-card" data-player-name="${sub.name}" data-team="${teamSide}">
+                            <div class="player-circle-vis ${posClass}" style="background-image: url('${faceUrl}'); background-size: cover; background-position: center;">
+                                ${redCardIcon}
+                            </div>
+                            <div class="player-info-vis">
+                                ${flagUrl ? `<div class="player-flag-vis" style="background-image: url('${flagUrl}'); background-size: cover;"></div>` : ''}
+                                <span>${formattedName}</span>
+                                ${isCaptain ? getCaptainIcon() : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+                html += `</div></div>`;
+                return html;
+            }
+            
+            const homeRows = generatePitchRows(homeGroups, 'home');
+            const awayRows = generatePitchRows(awayGroups, 'away');
+            const homeBenchHtml = generateBenchHTML(homeSubs, 'home');
+            const awayBenchHtml = generateBenchHTML(awaySubs, 'away');
+            
+            const homeDisplayTactic = homeTactic ? homeTactic : '';
+            const awayDisplayTactic = awayTactic ? awayTactic : '';
+            
+            const homeManagerImgHtml = homeManagerImage ? `<img src="${homeManagerImage}" class="manager-img" style="width:36px;height:36px;object-fit:cover;border-radius:4px;">` : '';
+            const awayManagerImgHtml = awayManagerImage ? `<img src="${awayManagerImage}" class="manager-img" style="width:36px;height:36px;object-fit:cover;border-radius:4px;">` : '';
+            
+            const html = `
+                <div class="pitch-visual-container">
+                    <div class="pitch-wrapper">
+                        <div class="team-banner">
+                            ${homeDisplayTactic ? `<div class="formation-vis">${homeDisplayTactic}</div>` : ''}
+                            ${homeManager ? `<div class="manager-vis">${homeManagerImgHtml} ${homeManager}</div>` : ''}
+                        </div>
+                        <div class="pitch-side">
+                            <div class="center-circle"></div>
+                            <div class="penalty-area home"></div>
+                            <div class="penalty-area away"></div>
+                            <div class="goal-area home"></div>
+                            <div class="goal-area away"></div>
+                            <div class="penalty-spot home"></div>
+                            <div class="penalty-spot away"></div>
+                            <div class="penalty-arc-top"></div>
+                            <div class="penalty-arc-bottom"></div>
+                            <div class="corner top-left"></div>
+                            <div class="corner top-right"></div>
+                            <div class="corner bottom-left"></div>
+                            <div class="corner bottom-right"></div>
+                            <div class="pitch-grid">${homeRows}</div>
+                        </div>
+                        ${homeBenchHtml}
+                    </div>
+                    <div class="pitch-wrapper">
+                        <div class="team-banner">
+                            ${awayDisplayTactic ? `<div class="formation-vis">${awayDisplayTactic}</div>` : ''}
+                            ${awayManager ? `<div class="manager-vis">${awayManagerImgHtml} ${awayManager}</div>` : ''}
+                        </div>
+                        <div class="pitch-side">
+                            <div class="center-circle"></div>
+                            <div class="penalty-area home"></div>
+                            <div class="penalty-area away"></div>
+                            <div class="goal-area home"></div>
+                            <div class="goal-area away"></div>
+                            <div class="penalty-spot home"></div>
+                            <div class="penalty-spot away"></div>
+                            <div class="penalty-arc-top"></div>
+                            <div class="penalty-arc-bottom"></div>
+                            <div class="corner top-left"></div>
+                            <div class="corner top-right"></div>
+                            <div class="corner bottom-left"></div>
+                            <div class="corner bottom-right"></div>
+                            <div class="pitch-grid">${awayRows}</div>
+                        </div>
+                        ${awayBenchHtml}
+                    </div>
+                </div>
+            `;
+            
+            lineupsDiv.innerHTML = html;
+            
+            const allCards = lineupsDiv.querySelectorAll('.player-card, .substitute-card');
+            allCards.forEach(card => {
+                const playerName = card.getAttribute('data-player-name');
+                if (!playerName) return;
+                const playerData = findPlayerByName(playerName);
+                card.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (playerData) showPlayerPopup(playerData);
+                    else alert(`No se encontraron datos para ${formatPlayerName(playerName)}`);
+                });
+            });
         }
 
         window.switchTab = switchTab;
