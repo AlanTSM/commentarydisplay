@@ -2430,14 +2430,20 @@
             pointer-events: none;
         }
 
-        /* Glow animado para el marcador */
-        @keyframes scoreGlow {
-            0% { box-shadow: 0 0 10px rgba(255, 215, 0, 0.7); }
-            50% { box-shadow: 0 0 25px rgba(255, 215, 0, 1); }
-            100% { box-shadow: 0 0 10px rgba(255, 215, 0, 0.7); }
+        /* Clase para desplazar hacia la izquierda al portero expulsado */
+        .player-card.red-carded-gk {
+            transform: translateX(-12px);
         }
-        .score-glow {
-            animation: scoreGlow 2s ease-in-out;
+
+        /* Icono de sustitución en vista visual */
+        .sub-event-icon {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            width: 18px;
+            height: 18px;
+            z-index: 4;
+            pointer-events: none;
         }
 
         @media (max-width: 860px) {
@@ -2868,6 +2874,14 @@
         let substitutedPairs = new Set();
         let playerNamesSet = new Set();
         let redCardedPlayers = new Set();
+        let subbedInPlayers = new Set();
+        let subbedOutPlayers = new Set();
+
+        // Variables para el buffering de jugadas
+        let currentPlayRawLines = [];
+        let currentPlayFormattedLines = [];
+        let currentPlayMinute = null;
+        let currentPlayTeam = null;
 
         let scoreGlowTimeout = null;
 
@@ -3768,7 +3782,7 @@
                 if (event.type === 'redCard') {
                     setTimeout(() => {
                         redCardedPlayers.add(event.player);
-                        if (document.getElementById('lineups-tab').classList.contains('active') && visualLineupsMode) {
+                        if (document.getElementById('lineups-tab').classList.contains('active')) {
                             renderLineups();
                         }
                     }, 5000);
@@ -3945,7 +3959,8 @@
                 for (let i = 0; i < lines.length; i++) {
                     const trimmed = lines[i].trim();
                     if (trimmed.toLowerCase().includes('última actualización:')) {
-                        const match = trimmed.match(/última actualización:\s*(.+)/i);
+                        const lower = trimmed.toLowerCase();
+                        const match = lower.match(/última actualización:\s*(.+)/);
                         if (match) {
                             lastUpdateDate = match[1].trim();
                         }
@@ -4752,7 +4767,7 @@
                 }
                 awayBadgeUrl = badgesDB[awayLower] || badgesDB[awayLower.replace(/fc /g, '')] || badgesDB[awayLower.replace(' ', '')] || null;
                 if (awayBadgeUrl) {
-                    document.getElementById('away-team-name').innerHTML = `<img src="${awayBadgeUrl}" alt="${awayTeamName}" style="height: 42px; width: auto; vertical-align: middle; margin-left: 5px; margin-right: 5px;"> ${awayTeamName}`;
+                    document.getElementById('away-team-name').innerHTML = `${awayTeamName} <img src="${awayBadgeUrl}" alt="${awayTeamName}" style="height: 42px; width: auto; vertical-align: middle; margin-left: 5px;">`;
                 } else {
                     document.getElementById('away-team-name').textContent = awayTeamName;
                 }
@@ -5021,6 +5036,18 @@
             return `<img src="https://i.imgur.com/APb2Cru.png" class="captain-icon" style="width:14px; height:14px; vertical-align: middle; margin-left: 6px;" title="Capitán">`;
         }
 
+        function getSubInIcon() {
+            return `<img src="https://i.imgur.com/3LZgtAh.png" style="width:14px; height:14px; vertical-align: middle; margin-left: 4px;" title="Entrada">`;
+        }
+
+        function getSubOutIcon() {
+            return `<img src="https://i.imgur.com/CpAkDu9.png" style="width:14px; height:14px; vertical-align: middle; margin-left: 4px;" title="Salida">`;
+        }
+
+        function getRedCardIconHTML() {
+            return `<img src="https://i.imgur.com/scCFC2f.png" style="width:14px; height:14px; vertical-align: middle; margin-left: 4px;" title="Tarjeta roja">`;
+        }
+
         function extractTacticLetter(formation) {
             if (!formation) return '';
             const parts = formation.trim().split(/\s+/);
@@ -5034,12 +5061,10 @@
         // NUEVA FUNCIÓN PARA CAMBIAR POSICIÓN DE JUGADOR EN TIEMPO REAL
         function checkAndChangePosition(currentRawLine, currentTeam) {
             if (!currentRawLine) return false;
-            // Buscar palabras clave que indiquen cambio de posición
             const lowerLine = currentRawLine.toLowerCase();
             const posKeywords = ['gk', 'df', 'dm', 'mf', 'am', 'fw'];
             let foundPosition = null;
             for (let pk of posKeywords) {
-                // Buscar "de gk", "como dm", "en la posición de mf", "va a jugar de dm"
                 const regex = new RegExp(`(?:de|como|en la posici[oó]n de|jugar[aá] de)\\s+${pk}\\b`, 'i');
                 if (regex.test(lowerLine)) {
                     foundPosition = pk.toUpperCase();
@@ -5048,13 +5073,11 @@
             }
             if (!foundPosition) return false;
             
-            // Buscar nombres de jugador en la línea
             const tokens = currentRawLine.split(/\s+/).map(t => t.replace(/^[^\w]+|[^\w]+$/g, ''));
             const playerCandidates = tokens.filter(t => playerNamesSet.has(t));
             if (playerCandidates.length === 0) return false;
-            const playerName = playerCandidates[0]; // tomamos el primero encontrado
+            const playerName = playerCandidates[0];
             
-            // Determinar equipo del jugador
             let targetStarters = null;
             let targetSubs = null;
             let isHome = false;
@@ -5070,11 +5093,9 @@
                 return false;
             }
             
-            // Solo si el equipo coincide con el que tiene la posesión actual (currentTeam)
             const playerTeamName = isHome ? homeTeamName : awayTeamName;
             if (currentTeam !== playerTeamName) return false;
             
-            // Actualizar posición si el jugador está en titulares
             let updated = false;
             for (let p of targetStarters) {
                 if (p.name === playerName && p.position !== foundPosition) {
@@ -5101,77 +5122,58 @@
             return false;
         }
 
-        // Funciones para sustituciones (ya existentes)
-        function extractPlayerNamesFromLine(line) {
-            const tokens = line.split(/\s+/).map(t => t.replace(/^[^\w]+|[^\w]+$/g, ''));
-            return tokens.filter(t => playerNamesSet.has(t));
-        }
+        // Función para procesar sustituciones al finalizar una jugada
+        function processPlaySubstitutions(rawLines, team, minute) {
+            if (!team) return;
+            const fullText = rawLines.join(' ');
+            const mentionedNames = [];
+            const tokens = fullText.split(/\s+/).map(t => t.replace(/^[^\w]+|[^\w]+$/g, ''));
+            tokens.forEach(token => {
+                if (playerNamesSet.has(token)) {
+                    if (!mentionedNames.includes(token)) mentionedNames.push(token);
+                }
+            });
 
-        let previousRawLineSub = null;
-        function checkAndApplySubstitution(currentRawLine, previousRawLine, currentTeam) {
-            if (!currentRawLine) return false;
-            const currentTokens = extractPlayerNamesFromLine(currentRawLine);
-            const prevTokens = previousRawLine ? extractPlayerNamesFromLine(previousRawLine) : [];
-            const allTokens = [...new Set([...currentTokens, ...prevTokens])];
-            if (allTokens.length < 2) return false;
-            
-            let teamSide = null;
-            for (let token of allTokens) {
-                if (currentHomeStarters.some(p => p.name === token) || currentHomeSubs.some(p => p.name === token)) {
-                    if (teamSide === 'away') return false;
-                    teamSide = 'home';
-                } else if (currentAwayStarters.some(p => p.name === token) || currentAwaySubs.some(p => p.name === token)) {
-                    if (teamSide === 'home') return false;
-                    teamSide = 'away';
+            const isHome = (team === homeTeamName);
+            const starters = isHome ? currentHomeStarters : currentAwayStarters;
+            const subs = isHome ? currentHomeSubs : currentAwaySubs;
+
+            const mentionedStarters = [];
+            const mentionedSubs = [];
+            mentionedNames.forEach(name => {
+                if (starters.some(p => p.name === name)) mentionedStarters.push(name);
+                else if (subs.some(p => p.name === name)) mentionedSubs.push(name);
+            });
+
+            if (mentionedStarters.length === 1 && mentionedSubs.length === 1) {
+                const starterName = mentionedStarters[0];
+                const subName = mentionedSubs[0];
+                const pairKey = [starterName, subName].sort().join('|');
+                if (substitutedPairs.has(pairKey)) return;
+
+                const posPattern = /\b(GK|DF|DM|MF|AM|FW)\b/i;
+                const match = fullText.match(posPattern);
+                let newPos = match ? match[1].toUpperCase() : null;
+                if (!newPos) {
+                    const starterObj = starters.find(p => p.name === starterName);
+                    newPos = starterObj ? starterObj.position : 'MF';
                 }
-            }
-            if (!teamSide) return false;
-            if (currentTeam !== (teamSide === 'home' ? homeTeamName : awayTeamName)) return false;
-            
-            const starters = teamSide === 'home' ? currentHomeStarters : currentAwayStarters;
-            const subs = teamSide === 'home' ? currentHomeSubs : currentAwaySubs;
-            
-            let starterOut = null;
-            let subIn = null;
-            for (let token of allTokens) {
-                if (!starterOut && starters.some(p => p.name === token)) {
-                    starterOut = token;
-                }
-                if (!subIn && subs.some(p => p.name === token)) {
-                    subIn = token;
-                }
-            }
-            if (!starterOut || !subIn) return false;
-            const pairKey = [starterOut, subIn].sort().join('|');
-            if (substitutedPairs.has(pairKey)) return false;
-            
-            const starterObj = starters.find(p => p.name === starterOut);
-            const subObj = subs.find(p => p.name === subIn);
-            if (starterObj && subObj) {
-                const newStarter = { name: subObj.name, position: starterObj.position };
-                const newSub = { name: starterObj.name, position: subObj.position };
-                const starterIndex = starters.findIndex(p => p.name === starterOut);
-                const subIndex = subs.findIndex(p => p.name === subIn);
+
+                const starterIndex = starters.findIndex(p => p.name === starterName);
+                const subIndex = subs.findIndex(p => p.name === subName);
                 if (starterIndex !== -1 && subIndex !== -1) {
-                    starters[starterIndex] = newStarter;
-                    subs[subIndex] = newSub;
+                    const outgoingPlayer = starters[starterIndex];
+                    const incomingSub = subs[subIndex];
+                    starters[starterIndex] = { name: subName, position: newPos };
+                    subs[subIndex] = { name: starterName, position: outgoingPlayer.position };
                     substitutedPairs.add(pairKey);
+                    subbedInPlayers.add(subName);
+                    subbedOutPlayers.add(starterName);
                     if (document.getElementById('lineups-tab').classList.contains('active')) {
                         renderLineups();
                     }
-                    return true;
                 }
             }
-            return false;
-        }
-
-        function processSubstitutionsAndPosition(currentFormattedLine, currentRawLine, currentTeam) {
-            if (!currentRawLine) return;
-            // verificar cambio de posición
-            checkAndChangePosition(currentRawLine, currentTeam);
-            // verificar sustitución
-            checkAndApplySubstitution(currentRawLine, previousRawLineSub, currentTeam);
-            previousRawLineSub = currentRawLine;
         }
 
         // Aplicar configuración
@@ -5201,7 +5203,6 @@
             homeCaptain = homeCaptainSelect.value || null;
             awayCaptain = awayCaptainSelect.value || null;
             
-            // Actualizar nombres de entrenadores
             const homeManagerNameInput = document.getElementById('homeManagerNameInput').value.trim();
             const awayManagerNameInput = document.getElementById('awayManagerNameInput').value.trim();
             if (homeManagerNameInput !== "") {
@@ -5215,7 +5216,6 @@
                 renderLineups();
             }
             
-            // Imagen de estadio
             const fileInput = document.getElementById('stadiumFileInput');
             if (fileInput.files.length > 0) {
                 const file = fileInput.files[0];
@@ -5256,7 +5256,6 @@
             }
             updateRefereeDisplay();
             
-            // CLIMA
             const weatherType = document.getElementById('weatherTypeSelect').value;
             const temperature = document.getElementById('temperatureSelect').value;
             if (weatherType) {
@@ -5272,7 +5271,6 @@
             const weatherString = generateWeatherInfo();
             updateWeatherDisplay(weatherString);
             
-            // Imágenes de entrenadores
             const homeManagerFile = document.getElementById('homeManagerFile').files[0];
             if (homeManagerFile) {
                 const reader = new FileReader();
@@ -5414,8 +5412,9 @@
                     displayMatchStats();
                 }
             }
-            barsCheckbox.addEventListener('change', toggleHighlightDisabled);
+            barsCheckbox.checked = true;
             toggleHighlightDisabled();
+            barsCheckbox.addEventListener('change', toggleHighlightDisabled);
             fetchReferees();
             
             document.getElementById('removeHomeManagerBtn').addEventListener('click', function() {
@@ -5540,7 +5539,6 @@
             document.getElementById('homeManagerFile').value = '';
             document.getElementById('awayManagerFile').value = '';
             
-            // Cargar nombres actuales de entrenadores en los inputs de texto
             if (window.homeManager) document.getElementById('homeManagerNameInput').value = window.homeManager;
             if (window.awayManager) document.getElementById('awayManagerNameInput').value = window.awayManager;
             
@@ -5773,6 +5771,14 @@
                 originalRefereeInfo = `Árbitro: ${refName} (${refCountry})`;
                 i = refereeIndex + 1;
             }
+
+            // Si no se encontró árbitro en el input, asignar uno aleatorio
+            if (refereeIndex === -1 && (!customReferee || !customReferee.name)) {
+                if (refereesDB.length > 0) {
+                    const randomRef = refereesDB[Math.floor(Math.random() * refereesDB.length)];
+                    customReferee = { name: randomRef.name, nationality: randomRef.nationality };
+                }
+            }
             
             if (customReferee && customReferee.name) {
                 const formattedRefName = formatPlayerName(customReferee.name);
@@ -5868,7 +5874,12 @@
             recentPlays = [];
             redCardedPlayers.clear();
             substitutedPairs.clear();
-            previousRawLineSub = null;
+            subbedInPlayers.clear();
+            subbedOutPlayers.clear();
+            currentPlayRawLines = [];
+            currentPlayFormattedLines = [];
+            currentPlayMinute = null;
+            currentPlayTeam = null;
             updatePossessionBar();
             document.getElementById('pauseButton').textContent = 'Pausar';
             document.getElementById('minute').textContent = 'Minuto 0';
@@ -5888,32 +5899,49 @@
                     const line = narrationLines[lineIndex];
                     const rawLine = originalNarrationLines[lineIndex];
                     if (line.trim() === '---') {
+                        // Línea vacía, avanzar sin procesar jugada
                         lineIndex++;
                         timeoutId = setTimeout(showNextLine, currentDelay);
                         return;
                     }
                     
+                    // Si es comienzo de una nueva jugada
                     if (line.includes('Minuto de juego')) {
-                        const minMatch = line.match(/Minuto de juego\s+(\d+)/);
+                        // Procesar la jugada anterior si existe
+                        if (currentPlayRawLines.length > 0) {
+                            processPlaySubstitutions(currentPlayRawLines, currentPlayTeam, currentPlayMinute);
+                        }
+                        // Reiniciar buffer para la nueva jugada
+                        currentPlayRawLines = [];
+                        currentPlayFormattedLines = [];
+                        currentPlayMinute = null;
+                        currentPlayTeam = null;
+
+                        const minMatch = rawLine.match(/Minuto de juego\s+(\d+)/);
                         if (minMatch) {
-                            const currentMinute = parseInt(minMatch[1]);
-                            document.getElementById('minute').textContent = `Minuto ${currentMinute}`;
-                            displayEventInRealTime(currentMinute);
+                            currentPlayMinute = parseInt(minMatch[1]);
+                            document.getElementById('minute').textContent = `Minuto ${currentPlayMinute}`;
+                            displayEventInRealTime(currentPlayMinute);
                         }
 
-                        const detectedTeam = detectTeamFromNarration(line);
+                        const detectedTeam = detectTeamFromNarration(rawLine);
                         if (detectedTeam) {
                             currentTeamColor = detectedTeam;
+                            currentPlayTeam = detectedTeam;
                             recentPlays.push(detectedTeam);
                             if (recentPlays.length > 10) recentPlays.shift();
                             updatePossessionBar();
                             
-                            const tacticChange = detectTacticChange(line, currentTeamColor);
+                            const tacticChange = detectTacticChange(rawLine, currentTeamColor);
                             if (tacticChange) {
                                 updateTeamTactic(tacticChange.team, tacticChange.tactic);
                             }
                         }
-                        processSubstitutionsAndPosition(line, rawLine, detectedTeam);
+                        // Añadir la línea actual al buffer
+                        currentPlayRawLines.push(rawLine);
+                        currentPlayFormattedLines.push(line);
+                        // Verificar cambio de posición en esta línea
+                        checkAndChangePosition(rawLine, currentPlayTeam);
 
                         const colonIndex = line.indexOf(':');
                         if (colonIndex !== -1) {
@@ -5940,9 +5968,19 @@
                         return;
                     }
                     
-                    processSubstitutionsAndPosition(line, rawLine, currentTeamColor);
-                    
+                    // Si no es línea de minuto, simplemente acumular líneas y procesar narración
+                    if (currentPlayTeam) {
+                        currentPlayRawLines.push(rawLine);
+                        currentPlayFormattedLines.push(line);
+                        checkAndChangePosition(rawLine, currentPlayTeam);
+                    }
+
                     if (line.includes('FINAL')) {
+                        // Procesar última jugada antes de terminar
+                        if (currentPlayRawLines.length > 0) {
+                            processPlaySubstitutions(currentPlayRawLines, currentPlayTeam, currentPlayMinute);
+                            currentPlayRawLines = [];
+                        }
                         document.getElementById('minute').textContent = 'Finalizado';
                         document.getElementById('narration').style.display = 'none';
                         matchFinished = true;
@@ -6070,8 +6108,13 @@
             currentAwaySubs.forEach(p => playerNamesSet.add(p.name));
             
             substitutedPairs.clear();
-            previousRawLineSub = null;
             redCardedPlayers.clear();
+            subbedInPlayers.clear();
+            subbedOutPlayers.clear();
+            currentPlayRawLines = [];
+            currentPlayFormattedLines = [];
+            currentPlayMinute = null;
+            currentPlayTeam = null;
             
             document.getElementById('pauseButton').textContent = 'Pausar';
             document.getElementById('score').textContent = '0 - 0';
@@ -6112,7 +6155,7 @@
             narrationDiv.textContent = 'Avanzando al final...';
             let currentMinute = 0;
             let halftimeScore = null;
-            let currentTeamFF = null;
+            let fastForwardTeam = null;
 
             while (lineIndex < narrationLines.length) {
                 const line = narrationLines[lineIndex];
@@ -6124,16 +6167,29 @@
                 }
                 
                 if (line.includes('Minuto de juego')) {
-                    const detectedTeam = detectTeamFromNarration(line);
+                    // Procesar jugada anterior si existía
+                    if (currentPlayRawLines.length > 0) {
+                        processPlaySubstitutions(currentPlayRawLines, currentPlayTeam, currentPlayMinute);
+                        currentPlayRawLines = [];
+                    }
+                    const detectedTeam = detectTeamFromNarration(rawLine);
                     if (detectedTeam) {
                         currentTeamColor = detectedTeam;
-                        currentTeamFF = detectedTeam;
+                        fastForwardTeam = detectedTeam;
                     }
-                    const minMatch = line.match(/Minuto de juego\s+(\d+)/);
+                    const minMatch = rawLine.match(/Minuto de juego\s+(\d+)/);
                     if (minMatch) currentMinute = parseInt(minMatch[1]);
+                    // Iniciar nueva jugada buffer
+                    currentPlayRawLines = [rawLine];
+                    currentPlayFormattedLines = [line];
+                    currentPlayMinute = currentMinute;
+                    currentPlayTeam = fastForwardTeam;
+                } else {
+                    if (fastForwardTeam) {
+                        currentPlayRawLines.push(rawLine);
+                        checkAndChangePosition(rawLine, fastForwardTeam);
+                    }
                 }
-                
-                processSubstitutionsAndPosition(line, rawLine, currentTeamFF);
 
                 const scoreRegex = /\b(\d+-\d+)\b/;
                 const scoreMatch = line.match(scoreRegex);
@@ -6155,6 +6211,10 @@
                 displayEventInRealTime(currentMinute);
 
                 if (line.includes('FINAL')) {
+                    // Procesar última jugada
+                    if (currentPlayRawLines.length > 0) {
+                        processPlaySubstitutions(currentPlayRawLines, currentPlayTeam, currentPlayMinute);
+                    }
                     document.getElementById('minute').textContent = 'Finalizado';
                     narrationDiv.style.display = 'none';
                     matchFinished = true;
@@ -6221,7 +6281,15 @@
                             if (flagUrl) flagHtml = `<img src="${flagUrl}" alt="${playerData.Nat}" class="player-flag">`;
                         }
                         const isCaptain = (teamSide === 'home' && homeCaptain === p.name) || (teamSide === 'away' && awayCaptain === p.name);
-                        li.innerHTML = `<span class="pos-circle ${p.position.toLowerCase()}">${p.position}</span>${flagHtml}<span class="player-name">${formatPlayerName(p.name)}</span>${isCaptain ? getCaptainIcon() : ''}`;
+                        const isRedCarded = redCardedPlayers.has(p.name);
+                        const hasSubInIcon = subbedInPlayers.has(p.name);
+                        const hasSubOutIcon = subbedOutPlayers.has(p.name);
+                        let extraIcons = '';
+                        if (isCaptain) extraIcons += getCaptainIcon();
+                        if (isRedCarded) extraIcons += getRedCardIconHTML();
+                        if (hasSubInIcon) extraIcons += getSubInIcon();
+                        // No colocamos subOutIcon en los titulares (aunque si estuvieran en el campo después de salir no debería ocurrir)
+                        li.innerHTML = `<span class="pos-circle ${p.position.toLowerCase()}">${p.position}</span>${flagHtml}<span class="player-name">${formatPlayerName(p.name)}</span>${extraIcons}`;
                         if (playerData) {
                             li.onclick = function(e) { e.stopPropagation(); showPlayerPopup(playerData); };
                         } else {
@@ -6245,7 +6313,16 @@
                             if (flagUrl) flagHtml = `<img src="${flagUrl}" alt="${playerData.Nat}" class="player-flag">`;
                         }
                         const isCaptain = (teamSide === 'home' && homeCaptain === p.name) || (teamSide === 'away' && awayCaptain === p.name);
-                        li.innerHTML = `${formatPlayerName(p.name)} ${flagHtml}<span class="pos-circle sub">SUB</span>${isCaptain ? getCaptainIcon() : ''}`;
+                        const isRedCarded = redCardedPlayers.has(p.name);
+                        const hasSubInIcon = subbedInPlayers.has(p.name);
+                        const hasSubOutIcon = subbedOutPlayers.has(p.name);
+                        let leftIcons = '';
+                        let rightIcons = '';
+                        if (isCaptain) rightIcons += getCaptainIcon();
+                        if (isRedCarded) rightIcons += getRedCardIconHTML();
+                        if (hasSubOutIcon) leftIcons += getSubOutIcon(); // icono de salida a la izquierda
+                        if (hasSubInIcon) rightIcons += getSubInIcon(); // icono de entrada a la derecha (aunque en banquillo sería extraño)
+                        li.innerHTML = `${leftIcons}${formatPlayerName(p.name)} ${flagHtml}<span class="pos-circle sub">SUB</span>${rightIcons}`;
                         if (playerData) {
                             li.onclick = function(e) { e.stopPropagation(); showPlayerPopup(playerData); };
                         } else {
@@ -6387,11 +6464,19 @@
                 const formattedName = formatPlayerName(player.name);
                 const isCaptain = (teamSide === 'home' && homeCaptain === player.name) || (teamSide === 'away' && awayCaptain === player.name);
                 const posClass = (player.position || 'sub').toLowerCase();
+                const isRedCardedGK = (player.position === 'GK' && redCardedPlayers.has(player.name));
                 const redCardIcon = redCardedPlayers.has(player.name) ? `<img src="https://i.imgur.com/scCFC2f.png" class="red-card-icon" alt="Tarjeta roja">` : '';
+                const hasSubInIcon = subbedInPlayers.has(player.name);
+                const hasSubOutIcon = subbedOutPlayers.has(player.name);
+                let subEventIcon = '';
+                if (hasSubInIcon) subEventIcon = `<img src="https://i.imgur.com/3LZgtAh.png" class="sub-event-icon" alt="Entrada">`;
+                else if (hasSubOutIcon) subEventIcon = `<img src="https://i.imgur.com/CpAkDu9.png" class="sub-event-icon" alt="Salida">`;
+                const extraClass = isRedCardedGK ? ' red-carded-gk' : '';
                 return `
-                    <div class="player-card" data-player-name="${player.name}" data-team="${teamSide}">
+                    <div class="player-card${extraClass}" data-player-name="${player.name}" data-team="${teamSide}">
                         <div class="player-circle-vis ${posClass}" style="background-image: url('${faceUrl}'); background-size: cover; background-position: center;" title="${player.position} – ${formattedName}">
                             ${redCardIcon}
+                            ${subEventIcon}
                         </div>
                         <div class="player-info-vis">
                             ${flagUrl ? `<div class="player-flag-vis" style="background-image: url('${flagUrl}'); background-size: cover; width:14px; height:10px; display:inline-block;"></div>` : ''}
@@ -6414,10 +6499,16 @@
                     const isCaptain = (teamSide === 'home' && homeCaptain === sub.name) || (teamSide === 'away' && awayCaptain === sub.name);
                     const posClass = (sub.position || 'sub').toLowerCase();
                     const redCardIcon = redCardedPlayers.has(sub.name) ? `<img src="https://i.imgur.com/scCFC2f.png" class="red-card-icon" alt="Tarjeta roja">` : '';
+                    const hasSubInIcon = subbedInPlayers.has(sub.name);
+                    const hasSubOutIcon = subbedOutPlayers.has(sub.name);
+                    let subEventIcon = '';
+                    if (hasSubInIcon) subEventIcon = `<img src="https://i.imgur.com/3LZgtAh.png" class="sub-event-icon" alt="Entrada">`;
+                    else if (hasSubOutIcon) subEventIcon = `<img src="https://i.imgur.com/CpAkDu9.png" class="sub-event-icon" alt="Salida">`;
                     html += `
                         <div class="substitute-card" data-player-name="${sub.name}" data-team="${teamSide}">
                             <div class="player-circle-vis ${posClass}" style="background-image: url('${faceUrl}'); background-size: cover; background-position: center;">
                                 ${redCardIcon}
+                                ${subEventIcon}
                             </div>
                             <div class="player-info-vis">
                                 ${flagUrl ? `<div class="player-flag-vis" style="background-image: url('${flagUrl}'); background-size: cover;"></div>` : ''}
