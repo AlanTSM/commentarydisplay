@@ -485,6 +485,19 @@
             background: linear-gradient(180deg, #72deff 0%, #4a0fb3 100%);
             box-shadow: 0 4px 12px rgba(76, 201, 240, 0.4);
         }
+        #rewindButton {
+            background: linear-gradient(180deg, #f0a500 0%, #d18e00 100%);
+            border: 2px solid #f0a500;
+            padding: 8px 20px;
+        }
+        #rewindButton:hover:not(:disabled) {
+            background: linear-gradient(180deg, #ffb730 0%, #f0a500 100%);
+            box-shadow: 0 4px 12px rgba(240, 165, 0, 0.4);
+        }
+        #rewindButton:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
         #pasteButton {
             background: linear-gradient(180deg, #4cc9f0 0%, #3a0ca3 100%);
             border: 2px solid #4cc9f0;
@@ -516,6 +529,7 @@
             align-items: center;
             margin: 0 0 15px 0;
             gap: 15px;
+            flex-wrap: wrap;
         }
         #scoreboard {
             background: linear-gradient(180deg, #2a2a3e 0%, #1e1e30 100%);
@@ -1409,6 +1423,9 @@
         .event-match-player .event-type {
             color: #9d4edd;
         }
+        .event-sub .event-type {
+            color: #00ccff;
+        }
         .event-player-info {
             display: flex;
             align-items: center;
@@ -1422,6 +1439,9 @@
             object-fit: cover;
             border: 2px solid #9d4edd;
             flex-shrink: 0;
+        }
+        .player-avatar.opaque {
+            opacity: 0.5;
         }
         .event-player-details {
             display: flex;
@@ -2488,6 +2508,7 @@
                 </div>
                 <button id="pauseButton" onclick="togglePause()">Pausar</button>
                 <button id="resetButton" onclick="resetSimulation()">Reiniciar</button>
+                <button id="rewindButton" onclick="rewindFivePlays()" disabled>Rebobinar 5 jugadas</button>
                 <button id="fastForwardButton" onclick="fastForwardToEnd()">Ir al final</button>
             </div>
             <div id="scoreboard">
@@ -2765,6 +2786,52 @@
             </div>
         </div>
 
+        <!-- Nueva sección Colores -->
+        <label>Colores</label>
+        <div class="custom-colors-section" style="margin-bottom: 20px;">
+            <div style="display: flex; gap: 20px; margin-bottom: 10px;">
+                <div style="flex:1;">
+                    <label style="font-size:12px;">Color principal local</label>
+                    <input type="color" id="homePrimaryColor" value="#000000">
+                </div>
+                <div style="flex:1;">
+                    <label style="font-size:12px;">Color secundario local</label>
+                    <input type="color" id="homeSecondaryColor" value="#ffffff">
+                </div>
+            </div>
+            <div style="display: flex; gap: 20px;">
+                <div style="flex:1;">
+                    <label style="font-size:12px;">Color principal visitante</label>
+                    <input type="color" id="awayPrimaryColor" value="#000000">
+                </div>
+                <div style="flex:1;">
+                    <label style="font-size:12px;">Color secundario visitante</label>
+                    <input type="color" id="awaySecondaryColor" value="#ffffff">
+                </div>
+            </div>
+        </div>
+
+        <!-- Nueva sección Efectos de audio -->
+        <label>Efectos de audio</label>
+        <div class="audio-section" style="margin-bottom: 20px;">
+            <div style="margin-bottom: 8px;">
+                <label style="font-size:12px;">Sonido de fondo (.mp3)</label>
+                <input type="file" id="backgroundAudioFile" accept=".mp3">
+            </div>
+            <div style="margin-bottom: 8px;">
+                <label style="font-size:12px;">Sonido de goles (.mp3)</label>
+                <input type="file" id="goalAudioFile" accept=".mp3">
+            </div>
+            <div style="margin-bottom: 8px;">
+                <label style="font-size:12px;">Sonido de sustituciones (.mp3)</label>
+                <input type="file" id="subAudioFile" accept=".mp3">
+            </div>
+            <div style="margin-bottom: 8px;">
+                <label style="font-size:12px;">Sonido de tarjetas rojas (.mp3)</label>
+                <input type="file" id="redCardAudioFile" accept=".mp3">
+            </div>
+        </div>
+
         <!-- Sección Estadio con alineación vertical mejorada -->
         <label>Estadio</label>
         <div class="stadium-upload-row">
@@ -2876,6 +2943,8 @@
         let redCardedPlayers = new Set();
         let subbedInPlayers = new Set();
         let subbedOutPlayers = new Set();
+        let subInReasonMap = {};
+        let subOutReasonMap = {};
 
         // Variables para el buffering de jugadas
         let currentPlayRawLines = [];
@@ -2884,6 +2953,21 @@
         let currentPlayTeam = null;
 
         let scoreGlowTimeout = null;
+
+        // Audio
+        let backgroundAudio = null;
+        let goalAudio = null;
+        let subAudio = null;
+        let redCardAudio = null;
+
+        // Custom colors
+        let customHomePrimary = null;
+        let customHomeSecondary = null;
+        let customAwayPrimary = null;
+        let customAwaySecondary = null;
+
+        // Rewind stack
+        let rewindStack = [];
 
         const headerFields = [
             'Name', 'Age', 'Nat', 'St', 'Tk', 'Ps', 'Sh', 'Ag', 'KAb', 'TAb',
@@ -3323,31 +3407,6 @@
                 bestAwayPlayer.rating = maxAwayRating;
             }
 
-            function isSubstitute(playerIndex, teamPlayers) {
-                return playerIndex >= teamPlayers.length - 5;
-            }
-
-            function getPlayerIcons(player, isSubstitutePlayer, hasExtraTime) {
-                let icons = '';
-                const minPlayed = player.Min;
-                const redCards = player.Red;
-                const maxMin = hasExtraTime ? 120 : 90;
-
-                if (minPlayed === 0) return '';
-
-                if (isSubstitutePlayer) {
-                    if (minPlayed >= 1) {
-                        icons += `<img src="https://i.imgur.com/3LZgtAh.png" alt="Entrada" style="width:18px;height:18px;margin-left:5px;">`;
-                    }
-                } else {
-                    if (minPlayed < maxMin && redCards === 0) {
-                        icons += `<img src="https://i.imgur.com/CpAkDu9.png" alt="Salida" style="width:18px;height:18px;margin-left:5px;">`;
-                    }
-                }
-
-                return icons;
-            }
-
             homeList.innerHTML = '';
             homeRatings.forEach((ratingInfo, index) => {
                 const player = ratingInfo.player;
@@ -3362,7 +3421,13 @@
                     statsText = `(${player.Min}')`;
                 }
 
-                const icons = getPlayerIcons(player, isSubstitute(index, playerStats.home.players), hasExtraTime);
+                let icons = '';
+                if (subbedInPlayers.has(player.Name)) {
+                    icons += `<img src="https://i.imgur.com/3LZgtAh.png" alt="Entrada" style="width:18px;height:18px;margin-left:5px;" title="${subInReasonMap[player.Name] || 'Entró'}">`;
+                }
+                if (subbedOutPlayers.has(player.Name)) {
+                    icons += `<img src="https://i.imgur.com/CpAkDu9.png" alt="Salida" style="width:18px;height:18px;margin-left:5px;" title="${subOutReasonMap[player.Name] || 'Salió'}">`;
+                }
                 
                 const li = document.createElement('li');
                 li.className = player.Min === 0 ? 'no-play' : '';
@@ -3390,7 +3455,13 @@
                     statsText = `(${player.Min}')`;
                 }
 
-                const icons = getPlayerIcons(player, isSubstitute(index, playerStats.away.players), hasExtraTime);
+                let icons = '';
+                if (subbedInPlayers.has(player.Name)) {
+                    icons += `<img src="https://i.imgur.com/3LZgtAh.png" alt="Entrada" style="width:18px;height:18px;margin-left:5px;" title="${subInReasonMap[player.Name] || 'Entró'}">`;
+                }
+                if (subbedOutPlayers.has(player.Name)) {
+                    icons += `<img src="https://i.imgur.com/CpAkDu9.png" alt="Salida" style="width:18px;height:18px;margin-left:5px;" title="${subOutReasonMap[player.Name] || 'Salió'}">`;
+                }
                 
                 const li = document.createElement('li');
                 li.className = player.Min === 0 ? 'no-play' : '';
@@ -3641,7 +3712,8 @@
                 'yellowCard': 'https://i.imgur.com/YY7xLND.png',
                 'injury': 'https://i.imgur.com/tNufO9l.png',
                 'bestPlayer': 'https://i.imgur.com/gFjIXiB.png',
-                'matchPlayer': 'https://i.imgur.com/BGVmV62.png'
+                'matchPlayer': 'https://i.imgur.com/BGVmV62.png',
+                'substitution': 'https://i.imgur.com/vfIzTVV.png'
             };
             return icons[type] || '';
         }
@@ -3772,7 +3844,7 @@
             const eventsToShow = allEventsData.filter(event => event.minute === minute);
             
             eventsToShow.forEach(event => {
-                const eventId = `${event.type}-${event.player}-${event.minute}-${event.team}`;
+                const eventId = `${event.type}-${event.player || ''}-${event.minute}-${event.team}`;
                 
                 if (displayedEvents.has(eventId)) return;
                 displayedEvents.add(eventId);
@@ -3780,6 +3852,13 @@
                 createAndAppendEventElement(event);
                 
                 if (event.type === 'redCard') {
+                    if (redCardAudio) {
+                        if (backgroundAudio) backgroundAudio.pause();
+                        redCardAudio.play().catch(() => {});
+                        redCardAudio.onended = () => {
+                            if (backgroundAudio && simulationStarted && !matchFinished) backgroundAudio.play().catch(() => {});
+                        };
+                    }
                     setTimeout(() => {
                         redCardedPlayers.add(event.player);
                         if (document.getElementById('lineups-tab').classList.contains('active')) {
@@ -3836,6 +3915,10 @@
                     eventTypeText = 'JUGADOR DEL PARTIDO'; 
                     eventClass = 'event-match-player';
                     break;
+                case 'substitution':
+                    eventTypeText = 'SUSTITUCIÓN';
+                    eventClass = 'event-sub';
+                    break;
             }
             
             const team = event.team === 'home' ? homeTeamName : awayTeamName;
@@ -3850,8 +3933,41 @@
             }
             const iconUrl = getEventIcon(event.type);
             
-            const playerData = findPlayerByName(event.player);
-            const faceUrl = playerData && facesDB[playerData.Name] ? facesDB[playerData.Name] : (facesDB['Unknown'] || 'https://2img.net/i.imgur.com/7Y9zAkb.png');
+            let playerContent = '';
+            if (event.type === 'substitution') {
+                const playerInData = findPlayerByName(event.playerIn);
+                const playerOutData = findPlayerByName(event.playerOut);
+                const faceInUrl = playerInData && facesDB[playerInData.Name] ? facesDB[playerInData.Name] : (facesDB['Unknown'] || 'https://2img.net/i.imgur.com/7Y9zAkb.png');
+                const faceOutUrl = playerOutData && facesDB[playerOutData.Name] ? facesDB[playerOutData.Name] : (facesDB['Unknown'] || 'https://2img.net/i.imgur.com/7Y9zAkb.png');
+                playerContent = `
+                    <div class="event-player-info">
+                        <img src="${faceInUrl}" alt="${formatPlayerName(event.playerIn)}" class="player-avatar">
+                        <div class="event-player-details">
+                            <div class="event-player">${formatPlayerName(event.playerIn)}</div>
+                            <div class="event-team">${team}</div>
+                        </div>
+                    </div>
+                    <div class="event-player-info" style="opacity:0.5;">
+                        <img src="${faceOutUrl}" alt="${formatPlayerName(event.playerOut)}" class="player-avatar">
+                        <div class="event-player-details">
+                            <div class="event-player">${formatPlayerName(event.playerOut)}</div>
+                            <div class="event-team">${team}</div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                const playerData = findPlayerByName(event.player);
+                const faceUrl = playerData && facesDB[playerData.Name] ? facesDB[playerData.Name] : (facesDB['Unknown'] || 'https://2img.net/i.imgur.com/7Y9zAkb.png');
+                playerContent = `
+                    <div class="event-player-info">
+                        <img src="${faceUrl}" alt="${formatPlayerName(event.player)}" class="player-avatar">
+                        <div class="event-player-details">
+                            <div class="event-player">${formatPlayerName(event.player)}</div>
+                            <div class="event-team">${team}</div>
+                        </div>
+                    </div>
+                `;
+            }
             
             const eventDiv = document.createElement('div');
             eventDiv.className = `timeline-event ${event.team === 'home' ? 'left' : 'right'}`;
@@ -3865,13 +3981,7 @@
                         <span>${eventTypeText}</span>
                         <img src="${iconUrl}" alt="${eventTypeText}">
                     </div>
-                    <div class="event-player-info">
-                        <img src="${faceUrl}" alt="${formatPlayerName(event.player)}" class="player-avatar">
-                        <div class="event-player-details">
-                            <div class="event-player">${formatPlayerName(event.player)}</div>
-                            <div class="event-team">${team}</div>
-                        </div>
-                    </div>
+                    ${playerContent}
                 </div>
             `;
             
@@ -4172,6 +4282,15 @@
         }
 
         function getTeamColors(teamName) {
+            if (teamName === homeTeamName) {
+                if (customHomePrimary !== null && customHomeSecondary !== null) {
+                    return { primary: customHomePrimary, secondary: customHomeSecondary };
+                }
+            } else if (teamName === awayTeamName) {
+                if (customAwayPrimary !== null && customAwaySecondary !== null) {
+                    return { primary: customAwayPrimary, secondary: customAwaySecondary };
+                }
+            }
             if (!teamColorsPrimary[teamName]) {
                 return { primary: '#1e1e30', secondary: '#e0e0e0' };
             }
@@ -4520,6 +4639,9 @@
                 }
                 if (document.getElementById('experience-tab').classList.contains('active')) {
                     displayExperiencePoints();
+                }
+                if (backgroundAudio) {
+                    backgroundAudio.pause();
                 }
                 return true;
             } else if (line.includes('*************  PRÓRROGA  ****************')) {
@@ -5036,12 +5158,16 @@
             return `<img src="https://i.imgur.com/APb2Cru.png" class="captain-icon" style="width:14px; height:14px; vertical-align: middle; margin-left: 6px;" title="Capitán">`;
         }
 
-        function getSubInIcon() {
-            return `<img src="https://i.imgur.com/3LZgtAh.png" style="width:14px; height:14px; vertical-align: middle; margin-left: 4px;" title="Entrada">`;
+        function getSubInIcon(playerName) {
+            const reason = subInReasonMap[playerName];
+            const title = reason ? reason : '';
+            return `<img src="https://i.imgur.com/3LZgtAh.png" style="width:14px; height:14px; vertical-align: middle; margin-left: 4px;" title="${title}">`;
         }
 
-        function getSubOutIcon() {
-            return `<img src="https://i.imgur.com/CpAkDu9.png" style="width:14px; height:14px; vertical-align: middle; margin-left: 4px;" title="Salida">`;
+        function getSubOutIcon(playerName) {
+            const reason = subOutReasonMap[playerName];
+            const title = reason ? reason : '';
+            return `<img src="https://i.imgur.com/CpAkDu9.png" style="width:14px; height:14px; vertical-align: middle; margin-left: 4px;" title="${title}">`;
         }
 
         function getRedCardIconHTML() {
@@ -5058,7 +5184,6 @@
             return '';
         }
 
-        // NUEVA FUNCIÓN PARA CAMBIAR POSICIÓN DE JUGADOR EN TIEMPO REAL
         function checkAndChangePosition(currentRawLine, currentTeam) {
             if (!currentRawLine) return false;
             const lowerLine = currentRawLine.toLowerCase();
@@ -5122,7 +5247,6 @@
             return false;
         }
 
-        // Función para procesar sustituciones al finalizar una jugada
         function processPlaySubstitutions(rawLines, team, minute) {
             if (!team) return;
             const fullText = rawLines.join(' ');
@@ -5169,14 +5293,35 @@
                     substitutedPairs.add(pairKey);
                     subbedInPlayers.add(subName);
                     subbedOutPlayers.add(starterName);
+                    subInReasonMap[subName] = `Entró por ${formatPlayerName(starterName)}`;
+                    subOutReasonMap[starterName] = `Salió por ${formatPlayerName(subName)}`;
                     if (document.getElementById('lineups-tab').classList.contains('active')) {
                         renderLineups();
+                    }
+                    if (subAudio) {
+                        if (backgroundAudio) backgroundAudio.pause();
+                        subAudio.play().catch(() => {});
+                        subAudio.onended = () => {
+                            if (backgroundAudio && simulationStarted && !matchFinished) backgroundAudio.play().catch(() => {});
+                        };
+                    }
+                    // Add substitution event to timeline
+                    const eventId = `substitution-${subName}-${starterName}-${minute}-${team}`;
+                    if (!displayedEvents.has(eventId)) {
+                        displayedEvents.add(eventId);
+                        createAndAppendEventElement({
+                            type: 'substitution',
+                            minute: minute,
+                            team: team,
+                            playerIn: subName,
+                            playerOut: starterName
+                        });
                     }
                 }
             }
         }
 
-        // Aplicar configuración
+        // Apply settings
         function applySettings() {
             const fontFamily = document.getElementById('fontFamily').value;
             const fontSize = document.getElementById('fontSize').value;
@@ -5214,6 +5359,32 @@
             
             if (document.getElementById('lineups-tab').classList.contains('active') && currentHomeStarters.length) {
                 renderLineups();
+            }
+            
+            // Custom colors
+            customHomePrimary = document.getElementById('homePrimaryColor').value || null;
+            customHomeSecondary = document.getElementById('homeSecondaryColor').value || null;
+            customAwayPrimary = document.getElementById('awayPrimaryColor').value || null;
+            customAwaySecondary = document.getElementById('awaySecondaryColor').value || null;
+            
+            // Audio files
+            const backgroundFile = document.getElementById('backgroundAudioFile').files[0];
+            if (backgroundFile && backgroundFile.type === 'audio/mpeg') {
+                if (backgroundAudio) backgroundAudio.pause();
+                backgroundAudio = new Audio(URL.createObjectURL(backgroundFile));
+                backgroundAudio.loop = true;
+            }
+            const goalFile = document.getElementById('goalAudioFile').files[0];
+            if (goalFile && goalFile.type === 'audio/mpeg') {
+                goalAudio = new Audio(URL.createObjectURL(goalFile));
+            }
+            const subFile = document.getElementById('subAudioFile').files[0];
+            if (subFile && subFile.type === 'audio/mpeg') {
+                subAudio = new Audio(URL.createObjectURL(subFile));
+            }
+            const redCardFile = document.getElementById('redCardAudioFile').files[0];
+            if (redCardFile && redCardFile.type === 'audio/mpeg') {
+                redCardAudio = new Audio(URL.createObjectURL(redCardFile));
             }
             
             const fileInput = document.getElementById('stadiumFileInput');
@@ -5381,6 +5552,13 @@
             scoreGlowTimeout = setTimeout(() => {
                 scoreEl.classList.remove('score-glow');
             }, 2000);
+            if (goalAudio) {
+                if (backgroundAudio) backgroundAudio.pause();
+                goalAudio.play().catch(() => {});
+                goalAudio.onended = () => {
+                    if (backgroundAudio && simulationStarted && !matchFinished) backgroundAudio.play().catch(() => {});
+                };
+            }
         }
         
         window.addEventListener('DOMContentLoaded', function() {
@@ -5558,6 +5736,76 @@
         
         window.selectRandomReferee = selectRandomReferee;
         
+        // Rewind functionality
+        function pushSnapshot() {
+            const snapshot = {
+                lineIndex: lineIndex,
+                score: document.getElementById('score').textContent,
+                minute: document.getElementById('minute').textContent,
+                homeStarters: JSON.parse(JSON.stringify(currentHomeStarters)),
+                homeSubs: JSON.parse(JSON.stringify(currentHomeSubs)),
+                awayStarters: JSON.parse(JSON.stringify(currentAwayStarters)),
+                awaySubs: JSON.parse(JSON.stringify(currentAwaySubs)),
+                redCardedPlayers: new Set(redCardedPlayers),
+                subbedInPlayers: new Set(subbedInPlayers),
+                subbedOutPlayers: new Set(subbedOutPlayers),
+                substitutedPairs: new Set(substitutedPairs),
+                subInReasonMap: {...subInReasonMap},
+                subOutReasonMap: {...subOutReasonMap},
+                currentTeamColor: currentTeamColor,
+                recentPlays: [...recentPlays],
+                currentPlayRawLines: [...currentPlayRawLines],
+                currentPlayFormattedLines: [...currentPlayFormattedLines],
+                currentPlayMinute: currentPlayMinute,
+                currentPlayTeam: currentPlayTeam,
+                homeTactic: homeTactic,
+                awayTactic: awayTactic
+            };
+            rewindStack.push(snapshot);
+        }
+
+        function rewindFivePlays() {
+            if (rewindStack.length < 5) return;
+            isPaused = true;
+            if (timeoutId) clearTimeout(timeoutId);
+            // Pop 5 snapshots
+            let target = null;
+            for (let i = 0; i < 5; i++) {
+                target = rewindStack.pop();
+            }
+            // Restore state
+            lineIndex = target.lineIndex;
+            document.getElementById('score').textContent = target.score;
+            document.getElementById('minute').textContent = target.minute;
+            currentHomeStarters = target.homeStarters;
+            currentHomeSubs = target.homeSubs;
+            currentAwayStarters = target.awayStarters;
+            currentAwaySubs = target.awaySubs;
+            redCardedPlayers = new Set(target.redCardedPlayers);
+            subbedInPlayers = new Set(target.subbedInPlayers);
+            subbedOutPlayers = new Set(target.subbedOutPlayers);
+            substitutedPairs = new Set(target.substitutedPairs);
+            subInReasonMap = {...target.subInReasonMap};
+            subOutReasonMap = {...target.subOutReasonMap};
+            currentTeamColor = target.currentTeamColor;
+            recentPlays = [...target.recentPlays];
+            currentPlayRawLines = target.currentPlayRawLines;
+            currentPlayFormattedLines = target.currentPlayFormattedLines;
+            currentPlayMinute = target.currentPlayMinute;
+            currentPlayTeam = target.currentPlayTeam;
+            homeTactic = target.homeTactic;
+            awayTactic = target.awayTactic;
+            updatePossessionBar();
+            updateNarrationColors();
+            if (document.getElementById('lineups-tab').classList.contains('active')) renderLineups();
+            document.getElementById('pauseButton').textContent = 'Reanudar';
+        }
+
+        function updateRewindButton() {
+            const btn = document.getElementById('rewindButton');
+            btn.disabled = rewindStack.length < 5;
+        }
+
         async function parseAndDisplay(input) {
             if (!input.trim()) {
                 return;
@@ -5859,6 +6107,9 @@
             speedSelect.addEventListener('change', function(e) {
                 currentDelay = parseInt(e.target.value);
             });
+            
+            rewindStack = [];
+            updateRewindButton();
         }
         
         function startSimulation() {
@@ -5876,10 +6127,14 @@
             substitutedPairs.clear();
             subbedInPlayers.clear();
             subbedOutPlayers.clear();
+            subInReasonMap = {};
+            subOutReasonMap = {};
             currentPlayRawLines = [];
             currentPlayFormattedLines = [];
             currentPlayMinute = null;
             currentPlayTeam = null;
+            rewindStack = [];
+            updateRewindButton();
             updatePossessionBar();
             document.getElementById('pauseButton').textContent = 'Pausar';
             document.getElementById('minute').textContent = 'Minuto 0';
@@ -5891,6 +6146,10 @@
             narrationDiv.className = '';
             
             applyNarrationStyles();
+
+            if (backgroundAudio) {
+                backgroundAudio.play().catch(() => {});
+            }
 
             showNextLine = function() {
                 if (isPaused) return;
@@ -5910,6 +6169,8 @@
                         // Procesar la jugada anterior si existe
                         if (currentPlayRawLines.length > 0) {
                             processPlaySubstitutions(currentPlayRawLines, currentPlayTeam, currentPlayMinute);
+                            pushSnapshot();
+                            updateRewindButton();
                         }
                         // Reiniciar buffer para la nueva jugada
                         currentPlayRawLines = [];
@@ -5979,6 +6240,8 @@
                         // Procesar última jugada antes de terminar
                         if (currentPlayRawLines.length > 0) {
                             processPlaySubstitutions(currentPlayRawLines, currentPlayTeam, currentPlayMinute);
+                            pushSnapshot();
+                            updateRewindButton();
                             currentPlayRawLines = [];
                         }
                         document.getElementById('minute').textContent = 'Finalizado';
@@ -5999,6 +6262,7 @@
                         bestPlayerEvents.forEach(event => {
                             displayEventInRealTime(999);
                         });
+                        if (backgroundAudio) backgroundAudio.pause();
                         return;
                     }
                     
@@ -6111,10 +6375,16 @@
             redCardedPlayers.clear();
             subbedInPlayers.clear();
             subbedOutPlayers.clear();
+            subInReasonMap = {};
+            subOutReasonMap = {};
             currentPlayRawLines = [];
             currentPlayFormattedLines = [];
             currentPlayMinute = null;
             currentPlayTeam = null;
+            rewindStack = [];
+            updateRewindButton();
+            
+            if (backgroundAudio) backgroundAudio.pause();
             
             document.getElementById('pauseButton').textContent = 'Pausar';
             document.getElementById('score').textContent = '0 - 0';
@@ -6170,6 +6440,8 @@
                     // Procesar jugada anterior si existía
                     if (currentPlayRawLines.length > 0) {
                         processPlaySubstitutions(currentPlayRawLines, currentPlayTeam, currentPlayMinute);
+                        pushSnapshot();
+                        updateRewindButton();
                         currentPlayRawLines = [];
                     }
                     const detectedTeam = detectTeamFromNarration(rawLine);
@@ -6214,6 +6486,8 @@
                     // Procesar última jugada
                     if (currentPlayRawLines.length > 0) {
                         processPlaySubstitutions(currentPlayRawLines, currentPlayTeam, currentPlayMinute);
+                        pushSnapshot();
+                        updateRewindButton();
                     }
                     document.getElementById('minute').textContent = 'Finalizado';
                     narrationDiv.style.display = 'none';
@@ -6233,6 +6507,7 @@
                     bestPlayerEvents.forEach(event => {
                         displayEventInRealTime(999);
                     });
+                    if (backgroundAudio) backgroundAudio.pause();
                     break;
                 }
 
@@ -6287,8 +6562,8 @@
                         let extraIcons = '';
                         if (isCaptain) extraIcons += getCaptainIcon();
                         if (isRedCarded) extraIcons += getRedCardIconHTML();
-                        if (hasSubInIcon) extraIcons += getSubInIcon();
-                        // No colocamos subOutIcon en los titulares (aunque si estuvieran en el campo después de salir no debería ocurrir)
+                        if (hasSubInIcon) extraIcons += getSubInIcon(p.name);
+                        // Los titulares no muestran icono de salida aquí, se muestra solo en el banquillo
                         li.innerHTML = `<span class="pos-circle ${p.position.toLowerCase()}">${p.position}</span>${flagHtml}<span class="player-name">${formatPlayerName(p.name)}</span>${extraIcons}`;
                         if (playerData) {
                             li.onclick = function(e) { e.stopPropagation(); showPlayerPopup(playerData); };
@@ -6320,8 +6595,8 @@
                         let rightIcons = '';
                         if (isCaptain) rightIcons += getCaptainIcon();
                         if (isRedCarded) rightIcons += getRedCardIconHTML();
-                        if (hasSubOutIcon) leftIcons += getSubOutIcon(); // icono de salida a la izquierda
-                        if (hasSubInIcon) rightIcons += getSubInIcon(); // icono de entrada a la derecha (aunque en banquillo sería extraño)
+                        if (hasSubOutIcon) leftIcons += getSubOutIcon(p.name) + ' '; // espacio añadido después del icono
+                        if (hasSubInIcon) rightIcons += getSubInIcon(p.name);
                         li.innerHTML = `${leftIcons}${formatPlayerName(p.name)} ${flagHtml}<span class="pos-circle sub">SUB</span>${rightIcons}`;
                         if (playerData) {
                             li.onclick = function(e) { e.stopPropagation(); showPlayerPopup(playerData); };
@@ -6469,8 +6744,8 @@
                 const hasSubInIcon = subbedInPlayers.has(player.name);
                 const hasSubOutIcon = subbedOutPlayers.has(player.name);
                 let subEventIcon = '';
-                if (hasSubInIcon) subEventIcon = `<img src="https://i.imgur.com/3LZgtAh.png" class="sub-event-icon" alt="Entrada">`;
-                else if (hasSubOutIcon) subEventIcon = `<img src="https://i.imgur.com/CpAkDu9.png" class="sub-event-icon" alt="Salida">`;
+                if (hasSubInIcon) subEventIcon = `<img src="https://i.imgur.com/3LZgtAh.png" class="sub-event-icon" alt="Entrada" title="${subInReasonMap[player.name] || ''}">`;
+                else if (hasSubOutIcon) subEventIcon = `<img src="https://i.imgur.com/CpAkDu9.png" class="sub-event-icon" alt="Salida" title="${subOutReasonMap[player.name] || ''}">`;
                 const extraClass = isRedCardedGK ? ' red-carded-gk' : '';
                 return `
                     <div class="player-card${extraClass}" data-player-name="${player.name}" data-team="${teamSide}">
@@ -6502,8 +6777,8 @@
                     const hasSubInIcon = subbedInPlayers.has(sub.name);
                     const hasSubOutIcon = subbedOutPlayers.has(sub.name);
                     let subEventIcon = '';
-                    if (hasSubInIcon) subEventIcon = `<img src="https://i.imgur.com/3LZgtAh.png" class="sub-event-icon" alt="Entrada">`;
-                    else if (hasSubOutIcon) subEventIcon = `<img src="https://i.imgur.com/CpAkDu9.png" class="sub-event-icon" alt="Salida">`;
+                    if (hasSubInIcon) subEventIcon = `<img src="https://i.imgur.com/3LZgtAh.png" class="sub-event-icon" alt="Entrada" title="${subInReasonMap[sub.name] || ''}">`;
+                    else if (hasSubOutIcon) subEventIcon = `<img src="https://i.imgur.com/CpAkDu9.png" class="sub-event-icon" alt="Salida" title="${subOutReasonMap[sub.name] || ''}">`;
                     html += `
                         <div class="substitute-card" data-player-name="${sub.name}" data-team="${teamSide}">
                             <div class="player-circle-vis ${posClass}" style="background-image: url('${faceUrl}'); background-size: cover; background-position: center;">
@@ -6606,6 +6881,7 @@
         window.togglePause = togglePause;
         window.resetSimulation = resetSimulation;
         window.fastForwardToEnd = fastForwardToEnd;
+        window.rewindFivePlays = rewindFivePlays;
         window.showFieldModal = showFieldModal;
         window.closeFieldModal = closeFieldModal;
         window.closePlayerPopup = closePlayerPopup;
