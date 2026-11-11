@@ -669,6 +669,43 @@
             margin-top: 5px;
             font-weight: bold;
         }
+        #penalty-board {
+            display: none;
+            max-width: 420px;
+            margin: 12px auto 0;
+            padding: 8px 14px;
+            background: #1e1e30;
+            border: 2px solid #533d7d;
+            border-radius: 5px;
+            font-size: 16px;
+            color: #e0e0e0;
+        }
+        #penalty-board .pen-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 3px 0;
+        }
+        #penalty-board .pen-team {
+            flex: 0 0 150px;
+            font-weight: bold;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #penalty-board .pen-kicks {
+            flex: 1;
+            letter-spacing: 2px;
+            white-space: nowrap;
+        }
+        #penalty-board .pen-total {
+            font-weight: bold;
+            font-size: 18px;
+            color: #ffcc00;
+        }
+        #penalty-board .pen-goal { color: #22c55e; }
+        #penalty-board .pen-miss { color: #ef4444; font-weight: bold; }
+        #penalty-board .pen-pending { color: #6b6b88; }
         #minute {
             text-align: center;
             font-size: 16px;
@@ -2726,6 +2763,7 @@
                 <div id="match-status">
                     <div id="narration"></div>
                 </div>
+                <div id="penalty-board"></div>
                 <div id="possession-bar-container">
                     <div id="possession-title">Dominio en los últimos minutos</div>
                     <div id="possession-bar"></div>
@@ -3219,6 +3257,392 @@
         // Match time
         let matchTime = "16:00";
 
+        // ===== Compatibilidad con los informes de esms_real (además de esms_plus) =====
+        // Diferencias principales de esms_real: minutos "45+3", nombres con espacios y puntos
+        // ("D. de Gea"), cada jugada empieza con el escudo del equipo (al copiar del foro llega el
+        // nombre del equipo o "(abr)"), lesiones en semanas, prórroga con sus marcadores y tanda de
+        // penaltis con marcador de ○ ✕ □.
+        let reportFormat = 'plus';
+        let teamAliasSide = {};
+        let learnedAliases = [];
+        let penaltyPending = null;
+        let penaltyScore = null;
+        let inShootout = false;
+        let penaltyRows = [];
+        let scoreNotes = { ht: null, ft90: null, et: null };
+        let reportAttendance = null;
+        let playersDBIndex = null;
+        let playersDBIndexSize = -1;
+
+        function stripAccents(s) {
+            return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        }
+
+        // Clave para comparar nombres: sin tildes, mayúsculas, puntos, espacios ni guiones bajos
+        function nameKey(s) {
+            return stripAccents(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+        }
+
+        // Nombre de la tabla de estadísticas (sin tildes, a veces recortado) frente al de la alineación
+        function statNameMatches(a, b) {
+            const ka = nameKey(a), kb = nameKey(b);
+            if (!ka || !kb) return false;
+            if (ka === kb) return true;
+            return Math.min(ka.length, kb.length) >= 10 && (ka.startsWith(kb) || kb.startsWith(ka));
+        }
+
+        // Nombre para mostrar de un jugador de las tablas de estadísticas (esms_real las escribe sin tildes ni
+        // puntos: "N_OReilly"); si está en las alineaciones se usa el nombre de allí ("N. OReilly")
+        function statsDisplayName(name) {
+            if (reportFormat === 'real') {
+                const exact = [...playerNamesSet].find(n => nameKey(n) === nameKey(name)) ||
+                              [...playerNamesSet].find(n => statNameMatches(n, name));
+                if (exact) return formatPlayerName(exact);
+            }
+            return formatPlayerName(name);
+        }
+
+        function setHasName(set, name) {
+            if (set.has(name)) return true;
+            for (const n of set) if (statNameMatches(n, name)) return true;
+            return false;
+        }
+
+        function mapGetName(map, name) {
+            if (name in map) return map[name];
+            for (const key in map) if (statNameMatches(key, name)) return map[key];
+            return undefined;
+        }
+
+        // "45+3" -> 45.03; "46" -> 46
+        function minuteValue(token) {
+            const m = String(token).trim().match(/^(\d+)(?:\+(\d+))?$/);
+            if (!m) return NaN;
+            return parseInt(m[1], 10) + (m[2] ? parseInt(m[2], 10) / 100 : 0);
+        }
+
+        function minuteLineRegex(token) {
+            return new RegExp('Minuto de juego\\s+' + String(token).replace('+', '\\+') + '(?![\\d+])');
+        }
+
+        // Marcadores de la narración: "*************  media parte  ****************", etc.
+        function parseMarker(line) {
+            const m = String(line).trim().match(/^\*{3,}\s*([^*]+?)\s*\*{3,}$/);
+            if (!m) return null;
+            const label = stripAccents(m[1]).toLowerCase();
+            if (label.includes('media parte')) return { kind: 'half', text: 'MEDIA PARTE' };
+            if (label.includes('descanso') && label.includes('rroga')) return { kind: 'etHalf', text: 'DESCANSO DE LA PRÓRROGA' };
+            if (/^pr.rroga$/.test(label)) return { kind: 'et', text: 'PRÓRROGA' };
+            if (label.includes('tanda')) return { kind: 'shootout', text: 'TANDA DE PENALTIS' };
+            if (label === 'final') return { kind: 'final', text: 'FINAL DEL PARTIDO' };
+            return null;
+        }
+
+        // Si el informe viene sin pasar por el foro (texto en bruto de esms_real), lo deja igual que
+        // la versión copiada del foro (donde los smileys se convierten en su texto alternativo)
+        function normalizeReportText(text) {
+            let t = String(text).replace(/\r/g, '').replace(/^\uFEFF/, '');
+            if (/^\s*Min\.\s+\d/m.test(t)) {
+                t = t.replace(/^(\s*)Min\.\s+/gm, '$1Minuto de juego ')
+                     .replace(/^(\s*)Árbitro:\s*/gm, '$1Árbitro ')
+                     .replace(/\(AMARILLA\)/g, 'Tarjeta amarilla')
+                     .replace(/\(ROJA\)/g, 'Tarjeta roja')
+                     .replace(/¡GO{2,}L!/g, '¡Gol!')
+                     .replace(/MEDIA PARTE/g, 'media parte');
+            }
+            return t;
+        }
+
+        function detectReportFormat(text) {
+            return /Produced from esms_real/i.test(text) || /Minuto de juego\s+\d+\+\d+/.test(text) ||
+                   /^\s*(?:Sale|Entra)\s*:/m.test(text) ? 'real' : 'plus';
+        }
+
+        // Equipo con el que empieza una jugada: nombre completo, "(abr)" o REF
+        function extractTeamAlias(afterColon) {
+            const text = String(afterColon || '').trim();
+            if (/^\(?REF\)?(?=\s|$)/.test(text)) return text.match(/^\(?REF\)?/)[0];
+            const raw = text.match(/^\(([A-Za-z0-9]{2,5})\)(?=\s|$)/);
+            if (raw) return raw[0];
+            const plain = stripAccents(text).toLowerCase();
+            const candidates = [homeTeamName, awayTeamName, ...learnedAliases, ...Object.keys(teamColorsPrimary), ...Object.keys(teamColorsAlternate)];
+            let best = '';
+            candidates.forEach(c => {
+                if (!c || c.length < 3 || c.length <= best.length) return;
+                const cl = stripAccents(c).toLowerCase();
+                if (plain.startsWith(cl) && (plain.length === cl.length || /[\s:]/.test(plain[cl.length]))) best = c;
+            });
+            return best ? text.substring(0, best.length) : '';
+        }
+
+        // 'home' | 'away' | 'ref' | null
+        function sideOfAlias(alias) {
+            if (!alias) return null;
+            if (/^\(?REF\)?$/.test(alias)) return 'ref';
+            const k = nameKey(alias);
+            if (teamAliasSide[k] !== undefined) return teamAliasSide[k];
+            const hk = nameKey(homeTeamName), ak = nameKey(awayTeamName);
+            let side = null;
+            if (k === hk && k !== ak) side = 'home';
+            else if (k === ak && k !== hk) side = 'away';
+            else if (k !== hk && k !== ak) {
+                const near = (a, b) => a.length > 2 && b.length > 2 && (a.includes(b) || b.includes(a));
+                const h = near(k, hk), a = near(k, ak);
+                if (h !== a) side = h ? 'home' : 'away';
+            }
+            if (!side) {
+                const same = (x, y) => !!x && !!y && x.primary === y.primary && x.secondary === y.secondary;
+                const c = teamColorsPrimary[alias], hc = teamColorsPrimary[homeTeamName], ac = teamColorsPrimary[awayTeamName];
+                if (same(c, hc) !== same(c, ac)) side = same(c, hc) ? 'home' : 'away';
+            }
+            if (side) teamAliasSide[k] = side;
+            return side;
+        }
+
+        function teamNameOfSide(side) {
+            return side === 'home' ? homeTeamName : side === 'away' ? awayTeamName : null;
+        }
+
+        // Texto de la jugada sin el equipo del principio (y sin "...")
+        function stripLineAlias(afterColon) {
+            const text = String(afterColon || '').trim();
+            const alias = extractTeamAlias(text);
+            return alias ? text.substring(alias.length).trim() : text;
+        }
+
+        // Nombres de jugadores de las alineaciones que aparecen en un texto, en orden de aparición
+        function findPlayerMatches(text) {
+            // Sin tildes ni puntos/guiones bajos (misma longitud, para conservar las posiciones)
+            const norm = s => stripAccents(s).toLowerCase().replace(/[._]/g, ' ');
+            const hay = norm(text);
+            const found = [];
+            playerNamesSet.forEach(name => {
+                const tokens = norm(name).trim().split(/\s+/).filter(t => t);
+                if (!tokens.length || tokens.join('').length < 3) return;
+                const re = new RegExp('(?<![a-z0-9])' + tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+') + '(?![a-z0-9])', 'g');
+                let m;
+                while ((m = re.exec(hay)) !== null) found.push({ name, index: m.index, end: m.index + m[0].length });
+            });
+            found.sort((a, b) => a.index - b.index || (b.end - b.index) - (a.end - a.index));
+            const result = [];
+            let lastEnd = -1;
+            found.forEach(f => {
+                if (f.index >= lastEnd) { result.push(f); lastEnd = f.end; }
+            });
+            return result;
+        }
+
+        function findPlayersInText(text) {
+            return findPlayerMatches(text).map(f => f.name);
+        }
+
+        function lineupNameFromText(text) {
+            const k = nameKey(text);
+            for (const n of playerNamesSet) if (nameKey(n) === k) return n;
+            return null;
+        }
+
+        function sideOfPlayer(name) {
+            if (currentHomeStarters.some(p => p.name === name) || currentHomeSubs.some(p => p.name === name)) return 'home';
+            if (currentAwayStarters.some(p => p.name === name) || currentAwaySubs.some(p => p.name === name)) return 'away';
+            return null;
+        }
+
+        // Jugadas de la narración: [{ token, lines }]
+        function getNarrationPlays() {
+            const plays = [];
+            let cur = null;
+            originalNarrationText.split('\n').forEach(l => {
+                const m = l.match(/Minuto de juego\s+(\d+(?:\+\d+)?)/);
+                if (m) {
+                    cur = { token: m[1], lines: [l] };
+                    plays.push(cur);
+                } else if (parseMarker(l)) {
+                    cur = null;
+                } else if (cur && l.trim()) {
+                    cur.lines.push(l);
+                }
+            });
+            return plays;
+        }
+
+        // Equipos de los alias que no se reconocen por el nombre (por ejemplo "(int)" en la tanda
+        // de penaltis): primero por las filas de la tanda y después por los jugadores nombrados
+        function resolveAliasesByPlayers(lines) {
+            for (let i = 0; i + 1 < lines.length; i++) {
+                const a = parsePenaltyRow(lines[i]), b = parsePenaltyRow(lines[i + 1]);
+                if (a && b && a.label && b.label) {
+                    teamAliasSide[nameKey(a.label)] = 'home';
+                    teamAliasSide[nameKey(b.label)] = 'away';
+                    break;
+                }
+            }
+            // Equipo de cada jugada: palabras iniciales antes del primer jugador nombrado
+            const plays = [];
+            lines.forEach(l => {
+                const m = l.match(/Minuto de juego\s+\S+\s*:(.*)$/);
+                if (!m) return;
+                const text = m[1].trim();
+                if (!text || /^\(?REF\)?(\s|$)/.test(text)) return;
+                const raw = text.match(/^\(([A-Za-z0-9]{2,5})\)(?=\s|$)/);
+                const rest = raw ? text.substring(raw[0].length).trim() : text;
+                const first = findPlayerMatches(rest)[0];
+                const side = first ? sideOfPlayer(first.name) : null;
+                if (raw) {
+                    if (side) {
+                        plays.push({ words: [raw[0]], side });
+                    }
+                    return;
+                }
+                const head = (first ? rest.substring(0, first.index) : rest).trim();
+                const words = head.split(/\s+/).filter(w => w && /^[^:]+$/.test(w)).slice(0, 6);
+                if (words.length) plays.push({ words, side });
+            });
+            const leaves = [];
+            const expand = (prefix, subset) => {
+                const counts = {};
+                subset.forEach(p => { const w = p.words[prefix.length]; if (w) counts[w] = (counts[w] || 0) + 1; });
+                const strong = Object.keys(counts).filter(w => counts[w] >= 3 && counts[w] >= 0.25 * subset.length);
+                if (!strong.length || prefix.length >= 5) { leaves.push({ prefix, subset }); return; }
+                strong.forEach(w => expand([...prefix, w], subset.filter(p => p.words[prefix.length] === w)));
+            };
+            const firstWords = {};
+            plays.forEach(p => { (firstWords[p.words[0]] = firstWords[p.words[0]] || []).push(p); });
+            Object.keys(firstWords).forEach(w => {
+                if (firstWords[w].length >= 3) expand([w], firstWords[w]);
+            });
+            leaves.forEach(({ prefix, subset }) => {
+                const alias = prefix.join(' ');
+                const v = { home: 0, away: 0 };
+                subset.forEach(p => { if (p.side) v[p.side]++; });
+                if (v.home + v.away < 2 || v.home === v.away) return;
+                const k = nameKey(alias);
+                if (teamAliasSide[k] === undefined) {
+                    const known = sideOfAlias(alias);
+                    if (!known) teamAliasSide[k] = v.home > v.away ? 'home' : 'away';
+                }
+                if (!/^\(/.test(alias) && learnedAliases.indexOf(alias) === -1) learnedAliases.push(alias);
+            });
+        }
+
+        // Filas de la tanda: "(int) ○ ✕ □ □ □..." (○ gol, ✕ fallo, □ pendiente)
+        function parsePenaltyRow(line) {
+            const m = String(line).trim().replace(/^\.{3}\s*/, '').match(/^(.*?)\s*((?:[○✕□]\s*){2,})\.*$/);
+            if (!m) return null;
+            return { label: m[1].trim(), kicks: m[2].replace(/\s+/g, '').split('') };
+        }
+
+        function renderPenaltyBoard() {
+            const board = document.getElementById('penalty-board');
+            if (!board) return;
+            if (penaltyRows.length < 2) {
+                board.style.display = 'none';
+                board.innerHTML = '';
+                return;
+            }
+            const sym = { '○': '<span class="pen-goal">●</span>', '✕': '<span class="pen-miss">✕</span>', '□': '<span class="pen-pending">□</span>' };
+            const row = (name, kicks) => {
+                const goals = kicks.filter(k => k === '○').length;
+                return `<div class="pen-row"><span class="pen-team">${name}</span><span class="pen-kicks">${kicks.map(k => sym[k]).join(' ')}</span><span class="pen-total">${goals}</span></div>`;
+            };
+            board.innerHTML = row(homeTeamName, penaltyRows[0]) + row(awayTeamName, penaltyRows[1]);
+            board.style.display = 'block';
+        }
+
+        function renderScoreNotes() {
+            const parts = [];
+            if (scoreNotes.ht) parts.push(`DES: ${scoreNotes.ht}`);
+            if (scoreNotes.ft90) parts.push(`90': ${scoreNotes.ft90}`);
+            if (scoreNotes.et) parts.push(`Prórroga: ${scoreNotes.et}`);
+            if (penaltyScore) parts.push(`Penaltis: ${penaltyScore.replace('-', ' - ')}`);
+            document.getElementById('halftime-score').textContent = parts.join('  ·  ');
+        }
+
+        function resetShootoutState() {
+            penaltyScore = null;
+            inShootout = false;
+            penaltyRows = [];
+            penaltyPending = null;
+            scoreNotes = { ht: null, ft90: null, et: null };
+            renderPenaltyBoard();
+            renderScoreNotes();
+        }
+
+        // Actualiza marcador, notas de resultado y tanda de penaltis con una línea de la narración.
+        // Devuelve true si la línea era una fila del marcador de la tanda (no se muestra).
+        function processScoreLine(line) {
+            const marker = parseMarker(line);
+            if (marker) {
+                if (marker.kind === 'shootout') inShootout = true;
+                return false;
+            }
+            const row = inShootout ? parsePenaltyRow(line) : null;
+            if (row) {
+                if (!penaltyPending) {
+                    penaltyPending = row.kicks;
+                } else {
+                    penaltyRows = [penaltyPending, row.kicks];
+                    penaltyPending = null;
+                    renderPenaltyBoard();
+                }
+                return true;
+            }
+            if (/Resultado al final de los 90/i.test(line)) {
+                const s = extractHalftimeScore(line);
+                if (s) { scoreNotes.ft90 = s; renderScoreNotes(); }
+                return false;
+            }
+            if (/Resultado al descanso de la pr.rroga/i.test(line)) return false;
+            if (/Resultado al final de la pr.rroga/i.test(line)) {
+                const s = extractHalftimeScore(line);
+                if (s) { scoreNotes.et = s; renderScoreNotes(); }
+                return false;
+            }
+            const scoreMatch = line.match(/\b(\d+-\d+)\b/);
+            if (scoreMatch) {
+                if (inShootout) {
+                    penaltyScore = scoreMatch[1];
+                    renderScoreNotes();
+                } else {
+                    updateScoreDisplay(scoreMatch[1]);
+                    const [h, a] = scoreMatch[1].split('-').map(Number);
+                    prevHomeGoals = h;
+                    prevAwayGoals = a;
+                }
+            }
+            if (line.includes('Resultado al descanso:')) {
+                const s = extractHalftimeScore(line);
+                if (s) displayHalftimeScore(s);
+            }
+            return false;
+        }
+
+        // Lleva las lesiones (en esms_real "Lesionado: X (3)" son semanas) y los penaltis al minuto
+        // de la narración en que ocurren
+        function adjustEventsFromNarration(events) {
+            const plays = getNarrationPlays();
+            const used = new Set();
+            for (let idx = events.length - 1; idx >= 0; idx--) {
+                const ev = events[idx];
+                if (ev.type === 'injury' && reportFormat === 'real') {
+                    ev.weeks = ev.label;
+                    const play = plays.find((p, pi) => !used.has(pi) && /lesion|camilla|se retira/i.test(p.lines.join(' ')) &&
+                        findPlayersInText(p.lines.join(' ')).some(n => statNameMatches(n, ev.player)));
+                    if (play) {
+                        used.add(plays.indexOf(play));
+                        ev.label = play.token;
+                        ev.minute = minuteValue(play.token);
+                    } else {
+                        events.splice(idx, 1);
+                    }
+                } else if (ev.type === 'goal' && !ev.isPenalty) {
+                    const play = plays.find(p => p.token === ev.label && /PENALTI/.test(p.lines.join(' ')) &&
+                        /(?:^|\s)¡?Gol\b/.test(p.lines.join(' ')));
+                    if (play) ev.isPenalty = true;
+                }
+            }
+        }
+
         const headerFields = [
             'Name', 'Age', 'Nat', 'St', 'Tk', 'Ps', 'Sh', 'Ag', 'KAb', 'TAb',
             'PAb', 'SAb', 'Gam', 'Sub', 'Min', 'Mom', 'Sav', 'Con', 'Ktk',
@@ -3607,7 +4031,7 @@
             const hasExtraTime = originalNarrationText.includes('PRÓRROGA');
 
             const homeRatings = playerStats.home.players.map(player => {
-                const isPlayerOfTheMatch = isPlayerOfTheMatchHome && player.Name === playerOfTheMatch;
+                const isPlayerOfTheMatch = isPlayerOfTheMatchHome && statNameMatches(player.Name, playerOfTheMatch);
                 return {
                     player: player,
                     rating: calculateRating(player, homeWinner, awayGoals, playerOfTheMatch, null, isPlayerOfTheMatch)
@@ -3615,7 +4039,7 @@
             });
 
             const awayRatings = playerStats.away.players.map(player => {
-                const isPlayerOfTheMatch = isPlayerOfTheMatchAway && player.Name === playerOfTheMatch;
+                const isPlayerOfTheMatch = isPlayerOfTheMatchAway && statNameMatches(player.Name, playerOfTheMatch);
                 return {
                     player: player,
                     rating: calculateRating(player, awayWinner, homeGoals, playerOfTheMatch, null, isPlayerOfTheMatch)
@@ -3626,25 +4050,25 @@
             const maxAwayRating = Math.max(...awayRatings.map(r => r.rating));
 
             homeRatings.forEach(ratingInfo => {
-                const isPlayerOfTheMatch = isPlayerOfTheMatchHome && ratingInfo.player.Name === playerOfTheMatch;
+                const isPlayerOfTheMatch = isPlayerOfTheMatchHome && statNameMatches(ratingInfo.player.Name, playerOfTheMatch);
                 if (isPlayerOfTheMatch && ratingInfo.rating < maxHomeRating) {
                     ratingInfo.rating = maxHomeRating;
                 }
             });
 
             awayRatings.forEach(ratingInfo => {
-                const isPlayerOfTheMatch = isPlayerOfTheMatchAway && ratingInfo.player.Name === playerOfTheMatch;
+                const isPlayerOfTheMatch = isPlayerOfTheMatchAway && statNameMatches(ratingInfo.player.Name, playerOfTheMatch);
                 if (isPlayerOfTheMatch && ratingInfo.rating < maxAwayRating) {
                     ratingInfo.rating = maxAwayRating;
                 }
             });
 
             const bestHomePlayer = homeRatings
-                .filter(r => !isPlayerOfTheMatchHome || r.player.Name !== playerOfTheMatch)
+                .filter(r => !isPlayerOfTheMatchHome || !statNameMatches(r.player.Name, playerOfTheMatch))
                 .reduce((best, current) => (!best || current.rating > best.rating) ? current : best, null);
             
             const bestAwayPlayer = awayRatings
-                .filter(r => !isPlayerOfTheMatchAway || r.player.Name !== playerOfTheMatch)
+                .filter(r => !isPlayerOfTheMatchAway || !statNameMatches(r.player.Name, playerOfTheMatch))
                 .reduce((best, current) => (!best || current.rating > best.rating) ? current : best, null);
 
             if (bestHomePlayer && bestHomePlayer.rating < maxHomeRating) {
@@ -3670,18 +4094,18 @@
                 }
 
                 let icons = '';
-                if (subbedInPlayers.has(player.Name)) {
-                    icons += `<img src="https://i.imgur.com/3LZgtAh.png" alt="Entrada" style="width:18px;height:18px;margin-left:5px;" title="${subInReasonMap[player.Name] || 'Entró'}">`;
+                if (setHasName(subbedInPlayers, player.Name)) {
+                    icons += `<img src="https://i.imgur.com/3LZgtAh.png" alt="Entrada" style="width:18px;height:18px;margin-left:5px;" title="${mapGetName(subInReasonMap, player.Name) || 'Entró'}">`;
                 }
-                if (subbedOutPlayers.has(player.Name)) {
-                    icons += `<img src="https://i.imgur.com/CpAkDu9.png" alt="Salida" style="width:18px;height:18px;margin-left:5px;" title="${subOutReasonMap[player.Name] || 'Salió'}">`;
+                if (setHasName(subbedOutPlayers, player.Name)) {
+                    icons += `<img src="https://i.imgur.com/CpAkDu9.png" alt="Salida" style="width:18px;height:18px;margin-left:5px;" title="${mapGetName(subOutReasonMap, player.Name) || 'Salió'}">`;
                 }
                 
                 const li = document.createElement('li');
                 li.className = player.Min === 0 ? 'no-play' : '';
                 li.innerHTML = `
                     <span class="player-name">
-                        ${formatPlayerName(player.Name)} 
+                        ${statsDisplayName(player.Name)} 
                         <span class="player-stats">${statsText}${icons}</span>
                     </span>
                     <span class="rating">${rating}</span>
@@ -3704,18 +4128,18 @@
                 }
 
                 let icons = '';
-                if (subbedInPlayers.has(player.Name)) {
-                    icons += `<img src="https://i.imgur.com/3LZgtAh.png" alt="Entrada" style="width:18px;height:18px;margin-left:5px;" title="${subInReasonMap[player.Name] || 'Entró'}">`;
+                if (setHasName(subbedInPlayers, player.Name)) {
+                    icons += `<img src="https://i.imgur.com/3LZgtAh.png" alt="Entrada" style="width:18px;height:18px;margin-left:5px;" title="${mapGetName(subInReasonMap, player.Name) || 'Entró'}">`;
                 }
-                if (subbedOutPlayers.has(player.Name)) {
-                    icons += `<img src="https://i.imgur.com/CpAkDu9.png" alt="Salida" style="width:18px;height:18px;margin-left:5px;" title="${subOutReasonMap[player.Name] || 'Salió'}">`;
+                if (setHasName(subbedOutPlayers, player.Name)) {
+                    icons += `<img src="https://i.imgur.com/CpAkDu9.png" alt="Salida" style="width:18px;height:18px;margin-left:5px;" title="${mapGetName(subOutReasonMap, player.Name) || 'Salió'}">`;
                 }
                 
                 const li = document.createElement('li');
                 li.className = player.Min === 0 ? 'no-play' : '';
                 li.innerHTML = `
                     <span class="player-name">
-                        ${formatPlayerName(player.Name)} 
+                        ${statsDisplayName(player.Name)} 
                         <span class="player-stats">${statsText}${icons}</span>
                     </span>
                     <span class="rating">${rating}</span>
@@ -3760,7 +4184,7 @@
             playerStats.home.players.forEach(player => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${formatPlayerName(player.Name)}</td>
+                    <td>${statsDisplayName(player.Name)}</td>
                     <td>${formatExpPoints(player.KAb)}</td>
                     <td>${formatExpPoints(player.TAb)}</td>
                     <td>${formatExpPoints(player.PAb)}</td>
@@ -3772,7 +4196,7 @@
             playerStats.away.players.forEach(player => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${formatPlayerName(player.Name)}</td>
+                    <td>${statsDisplayName(player.Name)}</td>
                     <td>${formatExpPoints(player.KAb)}</td>
                     <td>${formatExpPoints(player.TAb)}</td>
                     <td>${formatExpPoints(player.PAb)}</td>
@@ -3920,21 +4344,26 @@
             }
             
             for (let part of parts) {
-                const match = part.match(/^(.+?)\s*\(([^)]+)\)/);
+                const match = part.match(/^(.+?)\s*\(([^)]+)\)(.*)$/);
                 if (match) {
                     const playerName = match[1].trim();
                     const minutesStr = match[2];
+                    // esms_real escribe "Goleadores: X (13) autogol" fuera del paréntesis
+                    const suffixOwnGoal = /aut?ogol|\bog\b/i.test(match[3] || '');
+                    const suffixPenalty = /penalti|\bpen\b/i.test(match[3] || '');
                     
                     const minuteParts = minutesStr.split(',').map(m => m.trim());
                     
                     minuteParts.forEach(minutePart => {
-                        const isOwnGoal = minutePart.includes('og');
-                        const isPenalty = minutePart.includes('pen');
-                        const minute = parseInt(minutePart.replace(/og|pen/g, '').trim());
+                        const isOwnGoal = minutePart.includes('og') || suffixOwnGoal;
+                        const isPenalty = minutePart.includes('pen') || suffixPenalty;
+                        const label = minutePart.replace(/og|pen/g, '').trim();
+                        const minute = minuteValue(label);
                         
                         if (!isNaN(minute)) {
                             events.push({ 
                                 minute: minute, 
+                                label: label, 
                                 player: playerName, 
                                 type: isOwnGoal ? 'ownGoal' : type,
                                 isOwnGoal: isOwnGoal,
@@ -3968,11 +4397,11 @@
             
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
-                if (line.includes(`Minuto de juego ${minute}`)) {
+                if (minuteLineRegex(minute).test(line)) {
                     let currentPlay = [line];
                     i++;
                     
-                    while (i < lines.length && !lines[i].includes('Minuto de juego')) {
+                    while (i < lines.length && !lines[i].includes('Minuto de juego') && !parseMarker(lines[i])) {
                         if (lines[i].trim()) {
                             currentPlay.push(lines[i]);
                         }
@@ -4040,20 +4469,16 @@
                         if (index === 0) {
                             const colonIndex = line.indexOf(':');
                             if (colonIndex !== -1) {
-                                let afterColon = line.substring(colonIndex + 1).trim();
-                                if (afterColon.startsWith(homeTeamName)) {
-                                    afterColon = afterColon.substring(homeTeamName.length).trim();
-                                } else if (afterColon.startsWith(awayTeamName)) {
-                                    afterColon = afterColon.substring(awayTeamName.length).trim();
-                                }
+                                const afterColon = stripLineAlias(line.substring(colonIndex + 1));
                                 formattedLine = afterColon.replace(/^\s*\.{3}\s*/, '• ');
                                 formattedLine = formattedLine.replace(/\b[A-Za-z]+(?:_[A-Za-z]+)+\b/g, match => formatPlayerName(match));
                                 formattedLine = formattedLine.replace(/@/g, '');
                             }
                         }
                         
-                        if (formattedLine.startsWith('Gol ')) {
-                            formattedLine = '¡¡¡GOOOOOOL!!!' + formattedLine.substring(4);
+                        const popupGoal = formattedLine.match(/^(•\s*)?¡?Gol!?(?=\s|$)/);
+                        if (popupGoal) {
+                            formattedLine = (popupGoal[1] || '') + '¡¡¡GOOOOOOL!!!' + formattedLine.substring(popupGoal[0].length);
                         }
 
                         div.textContent = formattedLine;
@@ -4064,6 +4489,11 @@
             }
             
             popup.style.display = 'flex';
+        }
+
+        // Argumento de texto seguro para un onclick con comillas simples
+        function popupArg(text) {
+            return String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         }
 
         function closeGoalPopup(event) {
@@ -4081,10 +4511,14 @@
         }
 
         function displayEventInRealTime(minute) {
-            const eventsToShow = allEventsData.filter(event => event.minute === minute);
+            // minute: número o texto ("45+3"); 999 = eventos de final de partido.
+            // Se muestran los eventos cuyo minuto ya ha llegado (en esms_real el minuto de la
+            // lesión o del gol puede caer en un minuto sin jugada propia)
+            const current = typeof minute === 'number' ? minute : minuteValue(minute);
+            const eventsToShow = allEventsData.filter(event => minute === 999 ? event.minute === 999 : (event.minute !== 999 && event.minute <= current));
             
             eventsToShow.forEach(event => {
-                const eventId = `${event.type}-${event.player || ''}-${event.minute}-${event.team}`;
+                const eventId = `${event.type}-${event.player || ''}-${event.label || event.minute}-${event.team}`;
                 
                 if (displayedEvents.has(eventId)) return;
                 displayedEvents.add(eventId);
@@ -4120,20 +4554,20 @@
                 case 'goal': 
                     eventTypeText = `GOL ${event.isPenalty ? '(PENALTI)' : ''}`;
                     eventClass = 'event-goal';
-                    const goalScore = getGoalScore(event.minute);
+                    const goalScore = getGoalScore(event.label || event.minute);
                     if (goalScore) {
                         eventTypeText += ` (${goalScore})`;
                     }
-                    viewMoreLink = `<a class="view-more-link" onclick="showGoalPopup(${event.minute}, '${event.player}')">Ver más</a>`;
+                    viewMoreLink = `<a class="view-more-link" onclick="showGoalPopup('${event.label || event.minute}', '${popupArg(event.player)}')">Ver más</a>`;
                     break;
                 case 'ownGoal': 
                     eventTypeText = 'GOL EN PROPIA PUERTA';
                     eventClass = 'event-own-goal';
-                    const ownGoalScore = getGoalScore(event.minute);
+                    const ownGoalScore = getGoalScore(event.label || event.minute);
                     if (ownGoalScore) {
                         eventTypeText += ` (${ownGoalScore})`;
                     }
-                    viewMoreLink = `<a class="view-more-link" onclick="showGoalPopup(${event.minute}, '${event.player}')">Ver más</a>`;
+                    viewMoreLink = `<a class="view-more-link" onclick="showGoalPopup('${event.label || event.minute}', '${popupArg(event.player)}')">Ver más</a>`;
                     break;
                 case 'redCard': 
                     eventTypeText = 'TARJETA ROJA'; 
@@ -4144,7 +4578,7 @@
                     eventClass = 'event-yellow-card';
                     break;
                 case 'injury': 
-                    eventTypeText = 'LESIÓN'; 
+                    eventTypeText = event.weeks ? `LESIÓN (${event.weeks} ${event.weeks == 1 ? 'semana' : 'semanas'})` : 'LESIÓN'; 
                     eventClass = 'event-injury';
                     break;
                 case 'bestPlayer': 
@@ -4162,11 +4596,14 @@
             }
             
             const team = event.team === 'home' ? homeTeamName : awayTeamName;
-            let minuteDisplay = event.minute === 999 ? 'FT' : event.minute + "'";
-            if (event.type === 'goal' || event.type === 'ownGoal') {
+            let minuteDisplay = event.minute === 999 ? 'FT' : (event.label || event.minute) + "'";
+            if (reportFormat === 'real' && event.label && ['goal', 'ownGoal', 'yellowCard', 'redCard', 'injury'].includes(event.type)) {
+                // esms_real ya trae el minuto con tiempo añadido ("45+3"); se muestra como en esms_plus (sin ')
+                minuteDisplay = event.label;
+            } else if (event.type === 'goal' || event.type === 'ownGoal') {
                 minuteDisplay = formatMinuteDisplay(event.minute, matchTransitions);
             } else if (['yellowCard', 'redCard', 'injury'].includes(event.type)) {
-                const narration = getNarrationForMinute(event.minute);
+                const narration = getNarrationForMinute(event.label || event.minute);
                 if (shouldUseAddedTime(event.type, narration)) {
                     minuteDisplay = formatMinuteDisplay(event.minute, matchTransitions);
                 }
@@ -4285,7 +4722,7 @@
                     if (matchStart !== -1) matches.push({ start: matchStart, end: i - 1 });
                     matchStart = i;
                 }
-                if (matchStart !== -1 && line.includes('ESMS+')) {
+                if (matchStart !== -1 && (line.includes('ESMS+') || /Produced from esms_real/i.test(line))) {
                     matches.push({ start: matchStart, end: i });
                     matchStart = -1;
                 }
@@ -4367,6 +4804,10 @@
             playerStats = null;
             matchHighlights = null;
             allEventsData = [];
+            teamAliasSide = {};
+            learnedAliases = [];
+            reportAttendance = null;
+            resetShootoutState();
             document.getElementById('timeline').innerHTML = '';
             document.getElementById('highlights-message').style.display = 'block';
             document.getElementById('highlights-content').style.display = 'none';
@@ -4389,7 +4830,7 @@
         }
 
         async function validateAndParse() {
-            const inputText = textarea.value.trim();
+            const inputText = normalizeReportText(textarea.value).trim();
             if (!inputText) return;
             
             rawInput = inputText;
@@ -4733,34 +5174,18 @@
         }
         
         function findPlayerByName(name) {
-            const formattedName = formatPlayerName(name);
-
-            const searchNames = [
-                name,
-                formattedName,
-                name.replace(/_/g, ' '),
-                formattedName.replace(/\./g, '')
-            ];
-
-            searchNames.forEach(n => {
-                const cleanName = n.toLowerCase().replace(/[.\s]/g, '');
-                if (!searchNames.includes(cleanName)) {
-                    searchNames.push(cleanName);
+            if (!name) return null;
+            // Índice por nombre normalizado (sin tildes, puntos, espacios ni guiones bajos): sirve para
+            // "N. OReilly" (esms_real), "N_OReilly" (esms_plus y tablas de estadísticas) y "N OReilly"
+            if (playersDBIndex === null || playersDBIndexSize !== playersDB.length) {
+                playersDBIndex = new Map();
+                for (const player of playersDB) {
+                    const key = nameKey(player.Name);
+                    if (key && !playersDBIndex.has(key)) playersDBIndex.set(key, player);
                 }
-            });
-
-            for (let player of playersDB) {
-                const playerName = player.Name;
-                const cleanPlayerName = playerName.toLowerCase().replace(/[.\s]/g, '');
-
-                for (let searchName of searchNames) {
-                    const cleanSearchName = searchName.toLowerCase().replace(/[.\s]/g, '');
-                    if (cleanPlayerName === cleanSearchName) {
-                        return player;
-                    }
-                }
+                playersDBIndexSize = playersDB.length;
             }
-            return null;
+            return playersDBIndex.get(nameKey(name)) || null;
         }
         
         function showPlayerPopup(player) {
@@ -4981,20 +5406,21 @@
         }
         
         function displayHalftimeScore(score) {
-            const halftimeScoreElement = document.getElementById('halftime-score');
-            halftimeScoreElement.textContent = `DES: ${score}`;
+            scoreNotes.ht = score;
+            renderScoreNotes();
         }
         
         function handleSpecialEvents(line) {
             const narrationDiv = document.getElementById('narration');
+            const marker = parseMarker(line);
+            if (!marker) return false;
 
-            if (line.includes('*************  media parte  ****************')) {
-                narrationDiv.textContent = 'MEDIA PARTE';
-                narrationDiv.className = 'special-event';
-                return true;
-            } else if (line.includes('*************  FINAL  ****************')) {
-                narrationDiv.textContent = 'FINAL DEL PARTIDO';
-                narrationDiv.className = 'special-event';
+            narrationDiv.textContent = marker.text;
+            narrationDiv.className = 'special-event';
+            if (marker.kind === 'shootout') {
+                document.getElementById('minute').textContent = 'Tanda de penaltis';
+            }
+            if (marker.kind === 'final') {
                 matchFinished = true;
                 matchStats = extractMatchStats();
                 playerStats = extractPlayerStats();
@@ -5010,18 +5436,8 @@
                 if (backgroundAudio) {
                     backgroundAudio.pause();
                 }
-                return true;
-            } else if (line.includes('*************  PRÓRROGA  ****************')) {
-                narrationDiv.textContent = 'PRÓRROGA';
-                narrationDiv.className = 'special-event';
-                return true;
-            } else if (line.includes('*************  TANDA DE PENALTIS  *************')) {
-                narrationDiv.textContent = 'TANDA DE PENALTIS';
-                narrationDiv.className = 'special-event';
-                return true;
             }
-
-            return false;
+            return true;
         }
         
         textarea.addEventListener('input', function() {
@@ -5047,6 +5463,12 @@
             if (colonIndex === -1) return null;
 
             const afterColon = line.substring(colonIndex + 1).trim();
+
+            const alias = extractTeamAlias(afterColon);
+            if (alias) {
+                const side = sideOfAlias(alias);
+                return side === 'ref' ? null : teamNameOfSide(side);
+            }
             
             if (afterColon.includes(homeTeamName)) {
                 return homeTeamName;
@@ -5069,8 +5491,21 @@
             
             return teamKey || null;
         }
+
+        function isRefereeLine(line) {
+            const colonIndex = line.indexOf(':');
+            return colonIndex !== -1 && /^\(?REF\)?(?=\s|$)/.test(line.substring(colonIndex + 1).trim());
+        }
         
         function detectTacticChange(line, currentPossessionTeam) {
+            // esms_real: "Cambio de táctica en X: C → A"
+            const real = line.match(/Cambio de t[aá]ctica en\s+(.+?):\s*([ACDELNPT])\s*(?:→|->|&#8594;)\s*([ACDELNPT])(?![A-Za-z])/);
+            if (real) {
+                const side = sideOfAlias(real[1].trim());
+                const team = teamNameOfSide(side) || currentPossessionTeam;
+                return team ? { team: team, tactic: real[3] } : null;
+            }
+            if (reportFormat === 'real') return null;
             if (!currentPossessionTeam) return null;
             if (/D\s+nde/i.test(line)) return null;
             const pattern = /(?:^|\s)([ACDELNPT])(?![_])(?:\.(?!\s+[A-Z]))?(?=\s|$)/;
@@ -5140,6 +5575,9 @@
             
             if (customStadiumCapacity !== null && !isNaN(customStadiumCapacity)) {
                 capacityDiv.textContent = `Capacidad: ${customStadiumCapacity.toLocaleString()} espectadores`;
+            } else if (reportAttendance) {
+                // esms_real indica la asistencia real del partido
+                capacityDiv.textContent = `Asistencia: ${reportAttendance} espectadores`;
             } else {
                 const homeLower = homeTeamName.toLowerCase();
                 const capacity = stadiumCapacityDB[homeLower] || 
@@ -5343,25 +5781,21 @@
             let halfTimeCount = 0;
             
             for (let i = 0; i < lines.length; i++) {
-                const line = lines[i].trim();
+                const marker = parseMarker(lines[i]);
+                if (!marker) continue;
                 
-                if (line.includes('************* media parte ****************') || 
-                    line.includes('*************  media parte  ****************')) {
+                if (marker.kind === 'half') {
                     halfTimeCount++;
                     if (halfTimeCount === 1) {
                         transitions.firstHalfTime = i;
                     } else if (halfTimeCount === 2) {
                         transitions.extraTimeHalfTime = i;
                     }
-                }
-                
-                if (line.includes('************* PRÓRROGA ****************') ||
-                    line.includes('*************  PRÓRROGA  ****************')) {
+                } else if (marker.kind === 'etHalf') {
+                    transitions.extraTimeHalfTime = i;
+                } else if (marker.kind === 'et') {
                     transitions.extraTimeStart = i;
-                }
-                
-                if (line.includes('************* TANDA DE PENALTIS *************') ||
-                    line.includes('*************  TANDA DE PENALTIS  *************')) {
+                } else if (marker.kind === 'shootout') {
                     transitions.penaltyShootout = i;
                 }
             }
@@ -5373,11 +5807,16 @@
             if (minute === 999) {
                 return 'FT';
             }
+            if (/\+/.test(String(minute))) {
+                return String(minute);
+            }
+            minute = parseInt(minute, 10);
             
             const lines = originalNarrationText.split('\n');
             let minuteLine = -1;
+            const minuteRegex = minuteLineRegex(minute);
             for (let i = 0; i < lines.length; i++) {
-                if (lines[i].includes(`Minuto de juego ${minute}`)) {
+                if (minuteRegex.test(lines[i])) {
                     minuteLine = i;
                     break;
                 }
@@ -5541,8 +5980,35 @@
             return '';
         }
 
+        function setPlayerPosition(playerName, foundPosition, currentTeam) {
+            let targetStarters = null;
+            let targetSubs = null;
+            const side = sideOfPlayer(playerName);
+            if (!side) return false;
+            const isHome = side === 'home';
+            targetStarters = isHome ? currentHomeStarters : currentAwayStarters;
+            targetSubs = isHome ? currentHomeSubs : currentAwaySubs;
+            if (currentTeam && currentTeam !== (isHome ? homeTeamName : awayTeamName)) return false;
+            const p = targetStarters.find(x => x.name === playerName) || targetSubs.find(x => x.name === playerName);
+            if (!p || p.position === foundPosition) return false;
+            p.position = foundPosition;
+            if (document.getElementById('lineups-tab').classList.contains('active')) {
+                renderLineups();
+            }
+            return true;
+        }
+
         function checkAndChangePosition(currentRawLine, currentTeam) {
             if (!currentRawLine) return false;
+            if (reportFormat === 'real') {
+                // esms_real: "Y. Adli pasa a jugar de DM (antes MF)"
+                const colon = currentRawLine.indexOf(':');
+                const text = /Minuto de juego/.test(currentRawLine) && colon !== -1 ? stripLineAlias(currentRawLine.substring(colon + 1)) : currentRawLine.trim();
+                const m = text.match(/^(.+?)\s+pasa a jugar de\s+(GK|DF|DM|MF|AM|FW)\b/i);
+                if (!m) return false;
+                const name = lineupNameFromText(m[1]);
+                return name ? setPlayerPosition(name, m[2].toUpperCase(), null) : false;
+            }
             const lowerLine = currentRawLine.toLowerCase();
             const posKeywords = ['gk', 'df', 'dm', 'mf', 'am', 'fw'];
             let foundPosition = null;
@@ -5604,7 +6070,82 @@
             return false;
         }
 
+        // Aplica un cambio: el titular sale, el suplente entra y se registra el evento
+        function applySubstitution(team, starterName, subName, newPos, minute) {
+            const isHome = (team === homeTeamName);
+            const starters = isHome ? currentHomeStarters : currentAwayStarters;
+            const subs = isHome ? currentHomeSubs : currentAwaySubs;
+            const pairKey = [starterName, subName].sort().join('|');
+            if (substitutedPairs.has(pairKey)) return;
+
+            const starterIndex = starters.findIndex(p => p.name === starterName);
+            const subIndex = subs.findIndex(p => p.name === subName);
+            if (starterIndex === -1 || subIndex === -1) return;
+            const outgoingPlayer = starters[starterIndex];
+            if (!newPos) newPos = outgoingPlayer.position || 'MF';
+            starters[starterIndex] = { name: subName, position: newPos };
+            subs[subIndex] = { name: starterName, position: outgoingPlayer.position };
+            substitutedPairs.add(pairKey);
+            subbedInPlayers.add(subName);
+            subbedOutPlayers.add(starterName);
+            subInReasonMap[subName] = `Entró por ${formatPlayerName(starterName)}`;
+            subOutReasonMap[starterName] = `Salió por ${formatPlayerName(subName)}`;
+            if (document.getElementById('lineups-tab').classList.contains('active')) {
+                renderLineups();
+            }
+            if (subAudio) {
+                if (backgroundAudio) backgroundAudio.pause();
+                subAudio.play().catch(() => {});
+                subAudio.onended = () => {
+                    if (backgroundAudio && simulationStarted && !matchFinished) backgroundAudio.play().catch(() => {});
+                };
+            }
+            const eventId = `substitution-${subName}-${starterName}-${minute}-${team}`;
+            if (!displayedEvents.has(eventId)) {
+                displayedEvents.add(eventId);
+                createAndAppendEventElement({
+                    type: 'substitution',
+                    minute: minute,
+                    team: isHome ? 'home' : 'away',
+                    playerIn: subName,
+                    playerOut: starterName
+                });
+            }
+        }
+
+        // esms_real: "Cambio en X: sale A (DF), entra B (MF)", "Movimiento en el banquillo de X: sale A (DF),
+        // entra B (MF)" y "Entra B (MF) por A"
+        function processRealSubstitution(rawLines, minute) {
+            const first = rawLines[0] || '';
+            const colon = first.indexOf(':');
+            const text = colon !== -1 ? stripLineAlias(first.substring(colon + 1)) : first.trim();
+            let outText = null, inText = null, inPos = null;
+            let m = text.match(/(?:Cambio en|Movimiento en el banquillo de)\s+[^:]+:\s*sale\s+(.+?)\s*\((GK|DF|DM|MF|AM|FW)\)\s*,\s*entra\s+(.+?)\s*\((GK|DF|DM|MF|AM|FW)\)/i);
+            if (m) {
+                outText = m[1]; inText = m[3]; inPos = m[4].toUpperCase();
+            } else {
+                m = text.match(/^Entra\s+(.+?)\s*\((GK|DF|DM|MF|AM|FW)\)\s+por\s+(.+?)\s*\.?$/i);
+                if (m) { inText = m[1]; inPos = m[2].toUpperCase(); outText = m[3]; }
+                if (!m) {
+                    // "X (MF) sustituye a Y (AM)"
+                    m = text.match(/^(.+?)\s*\((GK|DF|DM|MF|AM|FW)\)\s+sustituye a\s+(.+?)\s*\((GK|DF|DM|MF|AM|FW)\)/i);
+                    if (m) { inText = m[1]; inPos = m[2].toUpperCase(); outText = m[3]; }
+                }
+            }
+            if (!outText) return;
+            const starterName = lineupNameFromText(outText);
+            const subName = lineupNameFromText(inText);
+            if (!starterName || !subName) return;
+            const side = sideOfPlayer(starterName);
+            if (!side) return;
+            applySubstitution(teamNameOfSide(side), starterName, subName, inPos, minute);
+        }
+
         function processPlaySubstitutions(rawLines, team, minute) {
+            if (reportFormat === 'real') {
+                processRealSubstitution(rawLines, minute);
+                return;
+            }
             if (!team) return;
             const fullText = rawLines.join(' ');
             const mentionedNames = [];
@@ -5629,51 +6170,9 @@
             if (mentionedStarters.length === 1 && mentionedSubs.length === 1) {
                 const starterName = mentionedStarters[0];
                 const subName = mentionedSubs[0];
-                const pairKey = [starterName, subName].sort().join('|');
-                if (substitutedPairs.has(pairKey)) return;
-
                 const posPattern = /\b(GK|DF|DM|MF|AM|FW)\b/i;
                 const match = fullText.match(posPattern);
-                let newPos = match ? match[1].toUpperCase() : null;
-                if (!newPos) {
-                    const starterObj = starters.find(p => p.name === starterName);
-                    newPos = starterObj ? starterObj.position : 'MF';
-                }
-
-                const starterIndex = starters.findIndex(p => p.name === starterName);
-                const subIndex = subs.findIndex(p => p.name === subName);
-                if (starterIndex !== -1 && subIndex !== -1) {
-                    const outgoingPlayer = starters[starterIndex];
-                    const incomingSub = subs[subIndex];
-                    starters[starterIndex] = { name: subName, position: newPos };
-                    subs[subIndex] = { name: starterName, position: outgoingPlayer.position };
-                    substitutedPairs.add(pairKey);
-                    subbedInPlayers.add(subName);
-                    subbedOutPlayers.add(starterName);
-                    subInReasonMap[subName] = `Entró por ${formatPlayerName(starterName)}`;
-                    subOutReasonMap[starterName] = `Salió por ${formatPlayerName(subName)}`;
-                    if (document.getElementById('lineups-tab').classList.contains('active')) {
-                        renderLineups();
-                    }
-                    if (subAudio) {
-                        if (backgroundAudio) backgroundAudio.pause();
-                        subAudio.play().catch(() => {});
-                        subAudio.onended = () => {
-                            if (backgroundAudio && simulationStarted && !matchFinished) backgroundAudio.play().catch(() => {});
-                        };
-                    }
-                    const eventId = `substitution-${subName}-${starterName}-${minute}-${team}`;
-                    if (!displayedEvents.has(eventId)) {
-                        displayedEvents.add(eventId);
-                        createAndAppendEventElement({
-                            type: 'substitution',
-                            minute: minute,
-                            team: team,
-                            playerIn: subName,
-                            playerOut: starterName
-                        });
-                    }
-                }
+                applySubstitution(team, starterName, subName, match ? match[1].toUpperCase() : null, minute);
             }
         }
 
@@ -5868,8 +6367,9 @@
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
+                const marker = parseMarker(line);
                 
-                if (line.includes('*************  FINAL  ****************')) {
+                if (marker && marker.kind === 'final') {
                     output += line + '\n';
                     finalFound = true;
                     continue;
@@ -5881,8 +6381,8 @@
                 }
                 
                 if (line.includes('Minuto de juego')) {
-                    const match = line.match(/Minuto de juego (\d+)/);
-                    if (match) {
+                    const match = line.match(/Minuto de juego (\d+)(\+\d+)?/);
+                    if (match && !match[2]) {
                         const currentMinute = parseInt(match[1]);
                         while (minute < currentMinute - 1) {
                             minute++;
@@ -5891,7 +6391,7 @@
                         minute = currentMinute;
                     }
                     output += line + '\n';
-                } else if (line.includes('*************  media parte  ****************')) {
+                } else if (marker && marker.kind === 'half') {
                     halfTimeCount++;
                     if (halfTimeCount === 1) {
                         minute = 45;
@@ -5899,7 +6399,10 @@
                         minute = 105;
                     }
                     output += line + '\n';
-                } else if (line.includes('*************  PRÓRROGA  ****************')) {
+                } else if (marker && marker.kind === 'etHalf') {
+                    minute = 105;
+                    output += line + '\n';
+                } else if (marker && marker.kind === 'et') {
                     minute = 90;
                     extraTime = true;
                     output += line + '\n';
@@ -6224,7 +6727,13 @@
                 currentPlayMinute: currentPlayMinute,
                 currentPlayTeam: currentPlayTeam,
                 homeTactic: homeTactic,
-                awayTactic: awayTactic
+                awayTactic: awayTactic,
+                halftimeScoreText: document.getElementById('halftime-score').textContent,
+                inShootout: inShootout,
+                penaltyScore: penaltyScore,
+                penaltyRows: penaltyRows.map(r => [...r]),
+                penaltyPending: penaltyPending,
+                scoreNotes: { ...scoreNotes }
             };
             rewindStack.push(snapshot);
         }
@@ -6258,6 +6767,13 @@
             currentPlayTeam = target.currentPlayTeam;
             homeTactic = target.homeTactic;
             awayTactic = target.awayTactic;
+            inShootout = target.inShootout;
+            penaltyScore = target.penaltyScore;
+            penaltyRows = target.penaltyRows.map(r => [...r]);
+            penaltyPending = target.penaltyPending;
+            scoreNotes = { ...target.scoreNotes };
+            document.getElementById('halftime-score').textContent = target.halftimeScoreText;
+            renderPenaltyBoard();
             updatePossessionBar();
             updateNarrationColors();
             if (document.getElementById('lineups-tab').classList.contains('active')) renderLineups();
@@ -6277,6 +6793,9 @@
             resetGlobalState();
             
             originalNarrationText = input;
+            reportFormat = detectReportFormat(input);
+            const attendanceMatch = input.match(/^\s*Asistencia\s*:\s*([\d.,]+)/m);
+            reportAttendance = attendanceMatch ? attendanceMatch[1] : null;
             
             await Promise.all([
                 fetchPlayerDatabase(),
@@ -6310,9 +6829,11 @@
             };
             const dateParts = date.split(' ');
             if (dateParts.length === 3) {
+                // esms_plus: "Tue Oct 06"; esms_real: "Dom 08 Nov" (ya en español)
+                const spanish = /^\d+$/.test(dateParts[1]);
                 const day = dayMap[dateParts[0]] || dateParts[0];
-                const month = monthMap[dateParts[1]] || dateParts[1].toLowerCase();
-                const num = dateParts[2];
+                const month = monthMap[spanish ? dateParts[2] : dateParts[1]] || (spanish ? dateParts[2] : dateParts[1]).toLowerCase();
+                const num = spanish ? dateParts[1] : dateParts[2];
                 date = `${day} ${num} ${month}`;
             }
             document.getElementById('match-header').innerHTML = `${competition} (${date})`;
@@ -6480,7 +7001,7 @@
                 const refParts = ref.split(' ');
                 const refNameRaw = refParts.shift();
                 const refName = formatPlayerName(refNameRaw);
-                const refCountry = refParts.join(' ');
+                const refCountry = refParts.join(' ').replace(/^\(|\)$/g, '');
                 originalRefereeInfo = `Árbitro: ${refName} (${refCountry})`;
                 i = refereeIndex + 1;
             }
@@ -6508,7 +7029,8 @@
             }
             let narrationEnd = lines.length;
             for (let j = narrationStart; j < lines.length; j++) {
-                if (lines[j].includes('FINAL')) {
+                const endMarker = parseMarker(lines[j]);
+                if (endMarker && endMarker.kind === 'final') {
                     narrationEnd = j + 1;
                     break;
                 }
@@ -6520,6 +7042,7 @@
             narrationLines = rawNarrationSlice.map(line => {
                 return line.replace(/\b[A-Za-z]+(?:_[A-Za-z]+)+\b/g, match => formatPlayerName(match)).replace(/@/g, '');
             });
+            resolveAliasesByPlayers(narrationLines);
             matchStats = extractMatchStats();
             matchHighlights = extractMatchHighlights(input);
             allEventsData = [];
@@ -6556,6 +7079,7 @@
                 });
             }
 
+            adjustEventsFromNarration(allEventsData);
             allEventsData.sort((a, b) => a.minute - b.minute);
 
             matchTransitions = detectMatchTransitions(input);
@@ -6598,6 +7122,7 @@
             currentPlayMinute = null;
             currentPlayTeam = null;
             rewindStack = [];
+            resetShootoutState();
             updateRewindButton();
             updatePossessionBar();
             document.getElementById('pauseButton').textContent = 'Pausar';
@@ -6638,25 +7163,25 @@
                         currentPlayMinute = null;
                         currentPlayTeam = null;
 
-                        const minMatch = rawLine.match(/Minuto de juego\s+(\d+)/);
+                        const minMatch = rawLine.match(/Minuto de juego\s+(\d+(?:\+\d+)?)/);
                         if (minMatch) {
-                            currentPlayMinute = parseInt(minMatch[1]);
+                            currentPlayMinute = minMatch[1];
                             document.getElementById('minute').textContent = `Minuto ${currentPlayMinute}`;
                             displayEventInRealTime(currentPlayMinute);
                         }
 
                         const detectedTeam = detectTeamFromNarration(rawLine);
+                        const refereeLine = isRefereeLine(rawLine);
                         if (detectedTeam) {
                             currentTeamColor = detectedTeam;
                             currentPlayTeam = detectedTeam;
                             recentPlays.push(detectedTeam);
                             if (recentPlays.length > 10) recentPlays.shift();
                             updatePossessionBar();
-                            
-                            const tacticChange = detectTacticChange(rawLine, currentTeamColor);
-                            if (tacticChange) {
-                                updateTeamTactic(tacticChange.team, tacticChange.tactic);
-                            }
+                        }
+                        const tacticChange = detectTacticChange(rawLine, detectedTeam);
+                        if (tacticChange) {
+                            updateTeamTactic(tacticChange.team, tacticChange.tactic);
                         }
                         currentPlayRawLines.push(rawLine);
                         currentPlayFormattedLines.push(line);
@@ -6664,16 +7189,11 @@
 
                         const colonIndex = line.indexOf(':');
                         if (colonIndex !== -1) {
-                            let afterColon = line.substring(colonIndex + 1).trim();
-                            if (afterColon.startsWith(homeTeamName)) {
-                                afterColon = afterColon.substring(homeTeamName.length).trim();
-                            } else if (afterColon.startsWith(awayTeamName)) {
-                                afterColon = afterColon.substring(awayTeamName.length).trim();
-                            }
+                            const afterColon = stripLineAlias(line.substring(colonIndex + 1));
                             narrationDiv.textContent = afterColon;
                             narrationDiv.className = '';
                             applyNarrationStyles();
-                            if (currentTeamColor) {
+                            if (currentTeamColor && !refereeLine) {
                                 const colors = getTeamColors(currentTeamColor);
                                 narrationDiv.style.background = colors.primary;
                                 narrationDiv.style.color = colors.secondary;
@@ -6693,7 +7213,8 @@
                         checkAndChangePosition(rawLine, currentPlayTeam);
                     }
 
-                    if (line.includes('FINAL')) {
+                    const finalMarker = parseMarker(line);
+                    if (finalMarker && finalMarker.kind === 'final') {
                         if (currentPlayRawLines.length > 0) {
                             processPlaySubstitutions(currentPlayRawLines, currentPlayTeam, currentPlayMinute);
                             pushSnapshot();
@@ -6722,20 +7243,11 @@
                         return;
                     }
                     
-                    const scoreRegex = /\b(\d+-\d+)\b/;
-                    const scoreMatch = line.match(scoreRegex);
-                    if (scoreMatch) {
-                        const newScore = scoreMatch[1];
-                        updateScoreDisplay(newScore);
-                        const [newHomeGoals, newAwayGoals] = newScore.split('-').map(Number);
-                        prevHomeGoals = newHomeGoals;
-                        prevAwayGoals = newAwayGoals;
-                    }
-                    if (line.includes('Resultado al descanso:')) {
-                        const halftimeScore = extractHalftimeScore(line);
-                        if (halftimeScore) {
-                            displayHalftimeScore(halftimeScore);
-                        }
+                    if (processScoreLine(line)) {
+                        // fila del marcador de la tanda de penaltis: se pinta en su panel, sin pausa
+                        lineIndex++;
+                        timeoutId = setTimeout(showNextLine, 0);
+                        return;
                     }
                     if (line.trim() !== '') {
                         let cleanLine = line.trimStart().replace(/^\.\.\.\s*/, '');
@@ -6746,8 +7258,17 @@
                             return;
                         }
 
-                        if (cleanLine.startsWith('Gol ')) {
-                            cleanLine = '¡¡¡GOOOOOOL!!! ' + cleanLine.substring(4);
+                        // En la tanda, cada lanzamiento empieza con el equipo: "(int) Endrick se seca..."
+                        const kickAlias = inShootout ? cleanLine.match(/^\(([A-Za-z0-9]{2,5})\)\s+/) : null;
+                        if (kickAlias) {
+                            const kickTeam = teamNameOfSide(sideOfAlias(kickAlias[0].trim()));
+                            if (kickTeam) currentTeamColor = kickTeam;
+                            cleanLine = cleanLine.substring(kickAlias[0].length);
+                        }
+
+                        const goalWord = cleanLine.match(/^¡?Gol!?(?=\s|$)/);
+                        if (goalWord) {
+                            cleanLine = '¡¡¡GOOOOOOL!!!' + cleanLine.substring(goalWord[0].length);
                             narrationDiv.textContent = cleanLine;
                             narrationDiv.className = 'goal-event';
                         } else {
@@ -6844,7 +7365,7 @@
             
             document.getElementById('pauseButton').textContent = 'Pausar';
             document.getElementById('score').textContent = '0 - 0';
-            document.getElementById('halftime-score').textContent = '';
+            resetShootoutState();
             document.getElementById('minute').innerHTML = '<button id="startButton" onclick="startSimulation()">Comenzar partido</button>';
             const narrationDiv = document.getElementById('narration');
             narrationDiv.textContent = '';
@@ -6880,7 +7401,6 @@
             const narrationDiv = document.getElementById('narration');
             narrationDiv.textContent = 'Avanzando al final...';
             let currentMinute = 0;
-            let halftimeScore = null;
             let fastForwardTeam = null;
 
             while (lineIndex < narrationLines.length) {
@@ -6904,12 +7424,17 @@
                         currentTeamColor = detectedTeam;
                         fastForwardTeam = detectedTeam;
                     }
-                    const minMatch = rawLine.match(/Minuto de juego\s+(\d+)/);
-                    if (minMatch) currentMinute = parseInt(minMatch[1]);
+                    const tacticChange = detectTacticChange(rawLine, detectedTeam);
+                    if (tacticChange) {
+                        updateTeamTactic(tacticChange.team, tacticChange.tactic);
+                    }
+                    const minMatch = rawLine.match(/Minuto de juego\s+(\d+(?:\+\d+)?)/);
+                    if (minMatch) currentMinute = minMatch[1];
                     currentPlayRawLines = [rawLine];
                     currentPlayFormattedLines = [line];
                     currentPlayMinute = currentMinute;
                     currentPlayTeam = fastForwardTeam;
+                    if (fastForwardTeam) checkAndChangePosition(rawLine, fastForwardTeam);
                 } else {
                     if (fastForwardTeam) {
                         currentPlayRawLines.push(rawLine);
@@ -6917,26 +7442,12 @@
                     }
                 }
 
-                const scoreRegex = /\b(\d+-\d+)\b/;
-                const scoreMatch = line.match(scoreRegex);
-                if (scoreMatch) {
-                    const newScore = scoreMatch[1];
-                    updateScoreDisplay(newScore);
-                    const [newHomeGoals, newAwayGoals] = newScore.split('-').map(Number);
-                    prevHomeGoals = newHomeGoals;
-                    prevAwayGoals = newAwayGoals;
-                }
-
-                if (line.includes('Resultado al descanso:')) {
-                    halftimeScore = extractHalftimeScore(line);
-                    if (halftimeScore) {
-                        displayHalftimeScore(halftimeScore);
-                    }
-                }
+                processScoreLine(line);
 
                 displayEventInRealTime(currentMinute);
 
-                if (line.includes('FINAL')) {
+                const ffMarker = parseMarker(line);
+                if (ffMarker && ffMarker.kind === 'final') {
                     if (currentPlayRawLines.length > 0) {
                         processPlaySubstitutions(currentPlayRawLines, currentPlayTeam, currentPlayMinute);
                         pushSnapshot();
