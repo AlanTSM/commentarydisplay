@@ -2678,6 +2678,7 @@
             .pitch-row { gap: 14px; }
         }
     </style>
+    <link rel="stylesheet" href="campo.css">
 </head>
 <body>
     <div class="container">
@@ -2777,6 +2778,7 @@
                 <div class="tab" onclick="switchTab('highlights-tab')">Eventos destacados</div>
                 <div class="tab" onclick="switchTab('ratings-tab')">Puntuaciones</div>
                 <div class="tab" onclick="switchTab('experience-tab')">Pts. de exp.</div>
+                <div class="tab" onclick="switchTab('campo-tab')">Vista de campo</div>
                 <span class="settings-icon" onclick="openSettingsPopup()">⚙️</span>
             </div>
 
@@ -2883,6 +2885,10 @@
                         </table>
                     </div>
                 </div>
+            </div>
+
+            <div id="campo-tab" class="tab-content">
+                <div id="campo-root"></div>
             </div>
         </div>
     </div>
@@ -3177,6 +3183,7 @@
         let matchTransitions = {};
         let simulationStarted = false;
         let skipEmptyMinutes = true;
+        let campoSeekUntil = null;
         let rawInput = '';
         let showAlternateColorsField = true;
         let currentTheme = 'actual';
@@ -3695,6 +3702,8 @@
                     document.getElementById('experience-message').style.display = 'block';
                     document.getElementById('experience-content').style.display = 'none';
                 }
+            } else if (tabId === 'campo-tab') {
+                if (window.Campo && typeof Campo.onShow === 'function') Campo.onShow();
             }
         }
         
@@ -7090,6 +7099,8 @@
             document.getElementById('minute').innerHTML = '<button id="startButton" onclick="startSimulation()">Comenzar partido</button>';
 
             output.style.display = 'block';
+            if (window.Campo && typeof Campo.resetView === 'function') Campo.resetView();
+            if (window.Campo && typeof Campo.refresh === 'function') Campo.refresh();
             const speedSelect = document.getElementById('speedSelect');
             currentDelay = parseInt(speedSelect.value);
             speedSelect.addEventListener('change', function(e) {
@@ -7101,8 +7112,9 @@
         }
         
         function startSimulation() {
+            const campoSeeking = campoSeekUntil != null;
             simulationStarted = true;
-            playWhistleSound();
+            if (!campoSeeking) playWhistleSound();
             lineIndex = 0;
             isPaused = false;
             currentTeamColor = '';
@@ -7136,7 +7148,7 @@
             
             applyNarrationStyles();
 
-            if (backgroundAudio) {
+            if (backgroundAudio && !campoSeeking) {
                 backgroundAudio.play().catch(() => {});
             }
 
@@ -7148,11 +7160,15 @@
                     const rawLine = originalNarrationLines[lineIndex];
                     if (line.trim() === '---') {
                         lineIndex++;
-                        timeoutId = setTimeout(showNextLine, currentDelay);
+                        timeoutId = setTimeout(showNextLine, nextNarrationDelay());
                         return;
                     }
                     
                     if (line.includes('Minuto de juego')) {
+                        const incomingMin = (rawLine.match(/Minuto de juego\s+(\d+(?:\+\d+)?)/) || [])[1];
+                        if (incomingMin && maybePauseSeekAtNewMinute(incomingMin)) {
+                            return;
+                        }
                         if (currentPlayRawLines.length > 0) {
                             processPlaySubstitutions(currentPlayRawLines, currentPlayTeam, currentPlayMinute);
                             pushSnapshot();
@@ -7203,7 +7219,7 @@
                             }
                         }
                         lineIndex++;
-                        timeoutId = setTimeout(showNextLine, currentDelay);
+                        timeoutId = setTimeout(showNextLine, nextNarrationDelay());
                         return;
                     }
                     
@@ -7215,6 +7231,14 @@
 
                     const finalMarker = parseMarker(line);
                     if (finalMarker && finalMarker.kind === 'final') {
+                        if (campoSeekUntil != null) {
+                            campoSeekUntil = null;
+                            isPaused = true;
+                            const pauseButton = document.getElementById('pauseButton');
+                            if (pauseButton) pauseButton.textContent = 'Reanudar';
+                            if (window.Campo && typeof Campo.refresh === 'function') Campo.refresh();
+                            return;
+                        }
                         if (currentPlayRawLines.length > 0) {
                             processPlaySubstitutions(currentPlayRawLines, currentPlayTeam, currentPlayMinute);
                             pushSnapshot();
@@ -7254,7 +7278,7 @@
 
                         if (handleSpecialEvents(line)) {
                             lineIndex++;
-                            timeoutId = setTimeout(showNextLine, currentDelay);
+                            timeoutId = setTimeout(showNextLine, nextNarrationDelay());
                             return;
                         }
 
@@ -7295,13 +7319,13 @@
                         }
                     }
                     lineIndex++;
-                    timeoutId = setTimeout(showNextLine, currentDelay);
+                    timeoutId = setTimeout(showNextLine, nextNarrationDelay());
                 }
             }
 
             setTimeout(() => {
                 showNextLine();
-            }, 1000);
+            }, campoSeeking ? 0 : 1000);
         }
         
         function togglePause() {
@@ -7320,6 +7344,8 @@
         }
         
         function resetSimulation() {
+            campoSeekUntil = null;
+            if (window.Campo && typeof Campo.resetView === 'function') Campo.resetView();
             simulationStarted = false;
             if (timeoutId) {
                 clearTimeout(timeoutId);
@@ -7835,6 +7861,73 @@
             });
         }
 
+        function nextNarrationDelay() {
+            // Mientras hay un seek, las líneas van a delay 0. La pausa se hace
+            // al detectar el minuto siguiente (ver showNextLine).
+            if (campoSeekUntil != null) return 0;
+            return currentDelay;
+        }
+
+        function maybePauseSeekAtNewMinute(incomingMinute) {
+            if (campoSeekUntil == null || currentPlayMinute == null) return false;
+            if (minuteValue(incomingMinute) > minuteValue(campoSeekUntil)) {
+                campoSeekUntil = null;
+                isPaused = true;
+                const pauseButton = document.getElementById('pauseButton');
+                if (pauseButton) pauseButton.textContent = 'Reanudar';
+                if (window.Campo && typeof Campo.refresh === 'function') Campo.refresh();
+                return true;
+            }
+            return false;
+        }
+
+        window.seekSimulationTo = function(targetMinute) {
+            if (targetMinute == null || targetMinute === '') return;
+            const target = minuteValue(targetMinute);
+            if (isNaN(target)) return;
+            const current = currentPlayMinute != null ? minuteValue(currentPlayMinute) : -1;
+            if (simulationStarted && !matchFinished && current >= 0 && target >= current &&
+                String(currentPlayMinute) === String(targetMinute) && !isPaused) {
+                return;
+            }
+            const needRestart = !simulationStarted || matchFinished || current > target ||
+                (current === target && String(currentPlayMinute) !== String(targetMinute));
+            campoSeekUntil = String(targetMinute);
+            if (needRestart) {
+                if (simulationStarted || matchFinished) resetSimulation();
+                startSimulation();
+            } else if (isPaused) {
+                isPaused = false;
+                const pauseButton = document.getElementById('pauseButton');
+                if (pauseButton) pauseButton.textContent = 'Pausar';
+                if (typeof showNextLine === 'function') showNextLine();
+            }
+        };
+
+        window.getCampoData = function() {
+            return {
+                homeTeam: homeTeamName,
+                awayTeam: awayTeamName,
+                homeStarters: currentHomeStarters.slice(),
+                awayStarters: currentAwayStarters.slice(),
+                homeSubs: currentHomeSubs.slice(),
+                awaySubs: currentAwaySubs.slice(),
+                homeColors: homeTeamName ? getTeamColors(homeTeamName) : { primary: '#1e1e30', secondary: '#e0e0e0' },
+                awayColors: awayTeamName ? getTeamColors(awayTeamName) : { primary: '#1e1e30', secondary: '#e0e0e0' },
+                minute: currentPlayMinute,
+                team: currentPlayTeam,
+                started: simulationStarted,
+                paused: isPaused,
+                finished: matchFinished,
+                score: (document.getElementById('score') || {}).textContent || '0 - 0',
+                narration: (document.getElementById('narration') || {}).textContent || '',
+                playersIn: findPlayersInText,
+                formatName: formatPlayerName,
+                detectTeam: detectTeamFromNarration,
+                plays: typeof getNarrationPlays === 'function' ? getNarrationPlays() : []
+            };
+        };
+
         window.switchTab = switchTab;
         window.pasteFromClipboard = pasteFromClipboard;
         window.toggleInput = toggleInput;
@@ -7859,5 +7952,6 @@
         window.highlightStatsCells = highlightStatsCells;
         window.toggleStatsView = toggleStatsView;
     </script>
+    <script src="campo.js"></script>
 </body>
 </html>

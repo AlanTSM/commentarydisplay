@@ -1,0 +1,164 @@
+/* Vista de campo 2D (rama vista-campo). No altera el resto de la página. */
+
+#campo-tab {
+    padding: 16px;
+}
+
+.campo-wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.campo-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-weight: 700;
+}
+
+.campo-team {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+    font-size: 15px;
+}
+
+.campo-team.away {
+    justify-content: flex-end;
+    text-align: right;
+}
+
+.campo-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.35);
+    flex-shrink: 0;
+}
+
+.campo-score {
+    font-size: 22px;
+    letter-spacing: 1px;
+    padding: 4px 14px;
+    border-radius: 8px;
+    background: #12121c;
+    border: 1px solid #533d7d;
+    color: #fff;
+    min-width: 90px;
+    text-align: center;
+}
+
+.campo-pitch-box {
+    position: relative;
+    width: 100%;
+    background: #0b3b1c;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 2px solid rgba(255,255,255,0.12);
+    box-shadow: 0 8px 28px rgba(0,0,0,0.4);
+}
+
+.campo-pitch-box svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.campo-caption {
+    min-height: 2.4em;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: #161624;
+    border: 1px solid #3a3a4e;
+    color: #e8e8f0;
+    font-size: 14px;
+    line-height: 1.35;
+}
+
+.campo-caption .campo-kind {
+    display: inline-block;
+    margin-right: 8px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: #533d7d;
+    color: #fff;
+    vertical-align: middle;
+}
+
+.campo-caption .campo-kind.goal,
+.campo-caption .campo-kind.own-goal { background: #15803d; }
+.campo-caption .campo-kind.shot { background: #1d4ed8; }
+.campo-caption .campo-kind.corner { background: #a16207; }
+.campo-caption .campo-kind.save { background: #0f766e; }
+.campo-caption .campo-kind.red { background: #b91c1c; }
+.campo-caption .campo-kind.yellow { background: #ca8a04; color: #1a1a1a; }
+.campo-caption .campo-kind.foul { background: #7c3aed; }
+
+.campo-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.campo-controls button {
+    background: linear-gradient(180deg, #7b2cbf 0%, #5a189a 100%);
+    color: #fff;
+    border: 1px solid #9d4edd;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: 700;
+    cursor: pointer;
+    min-width: 110px;
+}
+
+.campo-controls button:hover {
+    filter: brightness(1.08);
+}
+
+.campo-controls button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.campo-min {
+    font-weight: 700;
+    min-width: 110px;
+    color: #e0e0e0;
+}
+
+.campo-slider {
+    flex: 1;
+    min-width: 160px;
+    accent-color: #9d4edd;
+    height: 6px;
+}
+
+.campo-note {
+    margin: 0;
+    font-size: 12px;
+    color: #8b8ba0;
+}
+
+.campo-empty {
+    padding: 40px 16px;
+    text-align: center;
+    color: #b8b8d1;
+}
+
+@media (max-width: 700px) {
+    .campo-header { flex-wrap: wrap; }
+    .campo-team { flex: 1 1 40%; font-size: 13px; }
+    .campo-score { order: -1; flex: 1 1 100%; }
+}
