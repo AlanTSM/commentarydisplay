@@ -3185,6 +3185,7 @@
         let skipEmptyMinutes = true;
         let campoSeekUntil = null;
         let campoSeekPlayIndex = null;
+        let campoSeekUntilLine = null;
         let campoPlaysStarted = 0;
         let rawInput = '';
         let showAlternateColorsField = true;
@@ -7158,6 +7159,11 @@
             showNextLine = function() {
                 if (isPaused) return;
 
+                if (campoSeekUntilLine != null && lineIndex > campoSeekUntilLine) {
+                    stopCampoSeek();
+                    return;
+                }
+
                 if (lineIndex < narrationLines.length) {
                     const line = narrationLines[lineIndex];
                     const rawLine = originalNarrationLines[lineIndex];
@@ -7239,7 +7245,7 @@
 
                     const finalMarker = parseMarker(line);
                     if (finalMarker && finalMarker.kind === 'final') {
-                        if (campoSeekUntil != null || campoSeekPlayIndex != null) {
+                        if (campoSeekUntil != null || campoSeekPlayIndex != null || campoSeekUntilLine != null) {
                             stopCampoSeek();
                             return;
                         }
@@ -7350,6 +7356,7 @@
         function resetSimulation() {
             campoSeekUntil = null;
             campoSeekPlayIndex = null;
+            campoSeekUntilLine = null;
             if (window.Campo && typeof Campo.resetView === 'function') Campo.resetView();
             simulationStarted = false;
             if (timeoutId) {
@@ -7869,13 +7876,14 @@
         function nextNarrationDelay() {
             // Mientras hay un seek, las líneas van a delay 0. La pausa se hace
             // al detectar el minuto siguiente (ver showNextLine).
-            if (campoSeekUntil != null || campoSeekPlayIndex != null) return 0;
+            if (campoSeekUntil != null || campoSeekPlayIndex != null || campoSeekUntilLine != null) return 0;
             return currentDelay;
         }
 
         function stopCampoSeek() {
             campoSeekUntil = null;
             campoSeekPlayIndex = null;
+            campoSeekUntilLine = null;
             isPaused = true;
             const pauseButton = document.getElementById('pauseButton');
             if (pauseButton) pauseButton.textContent = 'Reanudar';
@@ -7892,10 +7900,19 @@
             return false;
         }
 
-        window.seekSimulationTo = function(targetMinute, playIndex) {
-            if (targetMinute == null || targetMinute === '') return;
+        window.seekSimulationTo = function(targetMinute, playIndex, untilLine) {
+            const hasLine = typeof untilLine === 'number' && untilLine >= 0;
+            if (!hasLine && (targetMinute == null || targetMinute === '')) return;
             const target = minuteValue(targetMinute);
-            if (isNaN(target)) return;
+            if (!hasLine && isNaN(target)) return;
+            if (hasLine) {
+                if (simulationStarted || matchFinished) resetSimulation();
+                campoSeekUntil = null;
+                campoSeekPlayIndex = null;
+                campoSeekUntilLine = untilLine;
+                startSimulation();
+                return;
+            }
             const current = currentPlayMinute != null ? minuteValue(currentPlayMinute) : -1;
             const hasPlay = typeof playIndex === 'number' && playIndex >= 0;
             if (!hasPlay && simulationStarted && !matchFinished && current >= 0 && target >= current &&
@@ -7939,7 +7956,19 @@
                 playersIn: findPlayersInText,
                 formatName: formatPlayerName,
                 detectTeam: detectTeamFromNarration,
-                plays: typeof getNarrationPlays === 'function' ? getNarrationPlays() : []
+                plays: typeof getNarrationPlays === 'function' ? getNarrationPlays() : [],
+                narrationText: typeof originalNarrationText !== 'undefined' ? originalNarrationText : '',
+                inShootout: !!inShootout,
+                penaltyScore: penaltyScore,
+                penaltyRows: penaltyRows ? penaltyRows.map(function(r){ return r.slice(); }) : [],
+                sideOfAlias: sideOfAlias,
+                sideOfPlayer: sideOfPlayer,
+                refereeName: (function(){
+                    if (customReferee && customReferee.name) return formatPlayerName(customReferee.name);
+                    const t = ((document.getElementById('referee-info') || {}).textContent || '');
+                    const m = t.match(/Árbitro:\s*([^(]+)/);
+                    return m ? m[1].trim() : '';
+                })()
             };
         };
 

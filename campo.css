@@ -43,6 +43,14 @@
     flex-shrink: 0;
 }
 
+.campo-score-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 90px;
+}
+
 .campo-score {
     font-size: 22px;
     letter-spacing: 1px;
@@ -54,6 +62,22 @@
     min-width: 90px;
     text-align: center;
 }
+
+.campo-pens {
+    font-size: 11px;
+    font-weight: 700;
+    color: #e8e8f0;
+    display: flex;
+    gap: 12px;
+    letter-spacing: 0.04em;
+}
+
+.campo-pens span { white-space: nowrap; }
+
+.campo-caption .campo-kind.shootout,
+.campo-caption .campo-kind.shootout-kick { background: #0f766e; }
+.campo-caption .campo-kind.counter { background: #b45309; }
+.campo-caption .campo-kind.clearance { background: #334155; }
 
 .campo-pitch-box {
     position: relative;
@@ -169,5 +193,13 @@
 
 .campo-player .campo-dorsal,
 .campo-player .campo-name {
+    user-select: none;
+}
+
+.campo-ref .campo-disk {
+    stroke-width: 2.4;
+}
+
+.campo-gk .campo-gk-letter {
     user-select: none;
 }
