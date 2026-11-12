@@ -3184,6 +3184,8 @@
         let simulationStarted = false;
         let skipEmptyMinutes = true;
         let campoSeekUntil = null;
+        let campoSeekPlayIndex = null;
+        let campoPlaysStarted = 0;
         let rawInput = '';
         let showAlternateColorsField = true;
         let currentTheme = 'actual';
@@ -7114,6 +7116,7 @@
         function startSimulation() {
             const campoSeeking = campoSeekUntil != null;
             simulationStarted = true;
+            campoPlaysStarted = 0;
             if (!campoSeeking) playWhistleSound();
             lineIndex = 0;
             isPaused = false;
@@ -7169,6 +7172,11 @@
                         if (incomingMin && maybePauseSeekAtNewMinute(incomingMin)) {
                             return;
                         }
+                        if (campoSeekPlayIndex != null && campoPlaysStarted > campoSeekPlayIndex) {
+                            stopCampoSeek();
+                            return;
+                        }
+                        campoPlaysStarted++;
                         if (currentPlayRawLines.length > 0) {
                             processPlaySubstitutions(currentPlayRawLines, currentPlayTeam, currentPlayMinute);
                             pushSnapshot();
@@ -7231,12 +7239,8 @@
 
                     const finalMarker = parseMarker(line);
                     if (finalMarker && finalMarker.kind === 'final') {
-                        if (campoSeekUntil != null) {
-                            campoSeekUntil = null;
-                            isPaused = true;
-                            const pauseButton = document.getElementById('pauseButton');
-                            if (pauseButton) pauseButton.textContent = 'Reanudar';
-                            if (window.Campo && typeof Campo.refresh === 'function') Campo.refresh();
+                        if (campoSeekUntil != null || campoSeekPlayIndex != null) {
+                            stopCampoSeek();
                             return;
                         }
                         if (currentPlayRawLines.length > 0) {
@@ -7345,6 +7349,7 @@
         
         function resetSimulation() {
             campoSeekUntil = null;
+            campoSeekPlayIndex = null;
             if (window.Campo && typeof Campo.resetView === 'function') Campo.resetView();
             simulationStarted = false;
             if (timeoutId) {
@@ -7864,37 +7869,47 @@
         function nextNarrationDelay() {
             // Mientras hay un seek, las líneas van a delay 0. La pausa se hace
             // al detectar el minuto siguiente (ver showNextLine).
-            if (campoSeekUntil != null) return 0;
+            if (campoSeekUntil != null || campoSeekPlayIndex != null) return 0;
             return currentDelay;
         }
 
+        function stopCampoSeek() {
+            campoSeekUntil = null;
+            campoSeekPlayIndex = null;
+            isPaused = true;
+            const pauseButton = document.getElementById('pauseButton');
+            if (pauseButton) pauseButton.textContent = 'Reanudar';
+            if (window.Campo && typeof Campo.refresh === 'function') Campo.refresh();
+        }
+
         function maybePauseSeekAtNewMinute(incomingMinute) {
+            if (campoSeekPlayIndex != null) return false;
             if (campoSeekUntil == null || currentPlayMinute == null) return false;
             if (minuteValue(incomingMinute) > minuteValue(campoSeekUntil)) {
-                campoSeekUntil = null;
-                isPaused = true;
-                const pauseButton = document.getElementById('pauseButton');
-                if (pauseButton) pauseButton.textContent = 'Reanudar';
-                if (window.Campo && typeof Campo.refresh === 'function') Campo.refresh();
+                stopCampoSeek();
                 return true;
             }
             return false;
         }
 
-        window.seekSimulationTo = function(targetMinute) {
+        window.seekSimulationTo = function(targetMinute, playIndex) {
             if (targetMinute == null || targetMinute === '') return;
             const target = minuteValue(targetMinute);
             if (isNaN(target)) return;
             const current = currentPlayMinute != null ? minuteValue(currentPlayMinute) : -1;
-            if (simulationStarted && !matchFinished && current >= 0 && target >= current &&
+            const hasPlay = typeof playIndex === 'number' && playIndex >= 0;
+            if (!hasPlay && simulationStarted && !matchFinished && current >= 0 && target >= current &&
                 String(currentPlayMinute) === String(targetMinute) && !isPaused) {
                 return;
             }
-            const needRestart = !simulationStarted || matchFinished || current > target ||
+            const needRestart = hasPlay || !simulationStarted || matchFinished || current > target ||
                 (current === target && String(currentPlayMinute) !== String(targetMinute));
-            campoSeekUntil = String(targetMinute);
             if (needRestart) {
                 if (simulationStarted || matchFinished) resetSimulation();
+            }
+            campoSeekUntil = String(targetMinute);
+            campoSeekPlayIndex = hasPlay ? playIndex : null;
+            if (needRestart) {
                 startSimulation();
             } else if (isPaused) {
                 isPaused = false;

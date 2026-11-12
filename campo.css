@@ -162,3 +162,12 @@
     .campo-team { flex: 1 1 40%; font-size: 13px; }
     .campo-score { order: -1; flex: 1 1 100%; }
 }
+
+.campo-player.is-active .campo-disk {
+    stroke-width: 3.2;
+}
+
+.campo-player .campo-dorsal,
+.campo-player .campo-name {
+    user-select: none;
+}
