@@ -181,10 +181,41 @@
     color: #b8b8d1;
 }
 
+.campo-caption .campo-kind.throwin { background: #0369a1; }
+.campo-caption .campo-kind.oneonone { background: #c2410c; }
+
 @media (max-width: 700px) {
-    .campo-header { flex-wrap: wrap; }
-    .campo-team { flex: 1 1 40%; font-size: 13px; }
-    .campo-score { order: -1; flex: 1 1 100%; }
+    #campo-tab { padding: 8px; }
+    .campo-wrap { gap: 6px; }
+    .campo-header { flex-wrap: nowrap; gap: 6px; }
+    .campo-team { flex: 1 1 0; min-width: 0; font-size: 12px; overflow: hidden; }
+    .campo-team span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .campo-score-block { min-width: 72px; flex-shrink: 0; }
+    .campo-score { font-size: 18px; padding: 3px 10px; min-width: 72px; }
+    .campo-caption { font-size: 12px; padding: 6px 8px; min-height: 0; }
+    .campo-controls { gap: 8px; }
+    .campo-controls button { min-width: 88px; padding: 7px 10px; font-size: 13px; }
+    .campo-min { min-width: 80px; font-size: 13px; }
+    .campo-note { font-size: 11px; }
+    /* El SVG escala al ancho; subimos un poco el texto para que se lea en pantallas estrechas. */
+    .campo-player .campo-name,
+    .campo-ref .campo-name { font-size: 14px; }
+    .campo-player .campo-dorsal,
+    .campo-ref .campo-dorsal { font-size: 14px; }
+}
+
+@media (max-width: 480px) {
+    #campo-tab { padding: 6px; }
+    .campo-team { font-size: 11px; }
+    .campo-swatch { width: 14px; height: 14px; }
+    .campo-score { font-size: 16px; padding: 2px 8px; min-width: 64px; }
+    .campo-caption { font-size: 11px; }
+    .campo-controls button { min-width: 76px; padding: 6px 8px; font-size: 12px; }
+    .campo-player .campo-name,
+    .campo-ref .campo-name { font-size: 16px; }
+    .campo-player .campo-dorsal,
+    .campo-ref .campo-dorsal { font-size: 15px; }
+    .campo-gk-letter { font-size: 10px; }
 }
 
 .campo-player.is-active .campo-disk {

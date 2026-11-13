@@ -27,7 +27,9 @@
         'shootout': 'Tanda',
         'shootout-kick': 'Penalti (tanda)',
         'counter': 'Contraataque',
-        'clearance': 'Despeje'
+        'clearance': 'Despeje',
+        'throwin': 'Saque de banda',
+        'oneonone': 'Mano a mano'
     };
 
     var root = null;
@@ -108,13 +110,33 @@
         return 'MF';
     }
 
-    function shortName(name, formatName) {
+    function shortName(name, formatName, compact) {
         var raw = formatName ? formatName(name) : name;
         raw = String(raw || name || '').trim();
         var parts = raw.replace(/\./g, ' ').split(/\s+/).filter(Boolean);
         if (!parts.length) return '';
         var last = parts[parts.length - 1];
-        return last.length > 10 ? last.slice(0, 9) + '.' : last;
+        var max = compact ? 6 : 10;
+        return last.length > max ? last.slice(0, max - 1) + '.' : last;
+    }
+
+    function isCompactView() {
+        var box = $('campo-pitch-box');
+        if (!box) return false;
+        return box.getBoundingClientRect().width < 640;
+    }
+
+    function applyCompactNames() {
+        if (!root) return;
+        var compact = isCompactView();
+        var wrap = root.querySelector('.campo-wrap');
+        if (wrap) wrap.classList.toggle('campo-compact', compact);
+        if (!playersLayer) return;
+        Array.prototype.forEach.call(playersLayer.querySelectorAll('.campo-name'), function (t) {
+            var full = t.getAttribute('data-full');
+            var short = t.getAttribute('data-short');
+            if (full && short) t.textContent = compact ? short : full;
+        });
     }
 
     function assignNumber(side, name) {
@@ -197,10 +219,20 @@
         if (/remate|chuta|disparo|volea|busca puerta|define |cabezazo|en posici[oó]n de remate|busca (la escuadra|el ángulo)/.test(s)) return 'shot';
         if (/contraataque|a la contra|se va de contra|sale de contra/.test(s)) return 'counter';
         if (/(?:^|[^a-záéíóúñ])despej[aeo]|manda (el bal[oó]n )?a la grada|rechaza (de cabeza|el bal[oó]n)/.test(s) && !/ataja|qu[eé] parada/.test(s)) return 'clearance';
+        if (/frente a porter[ií]a|mano a mano|solo ante|se planta|último defensor/.test(s)) return 'oneonone';
         if (/falta|derriba|comete falta|entrada /.test(s)) return 'foul';
+        if (/saque de banda/.test(s)) return 'throwin';
         if (/banda|por fuera|l[ií]nea de banda/.test(s)) return 'wing';
         if (/[aá]rea/.test(s)) return 'box';
         return 'play';
+    }
+
+    function isOneOnOneText(text) {
+        return /frente a porter[ií]a|mano a mano|solo ante|se planta|último defensor/.test(String(text || '').toLowerCase());
+    }
+
+    function isCounterText(text) {
+        return /contraataque|a la contra|se va de contra|sale de contra|monta un contra/.test(String(text || '').toLowerCase());
     }
 
     function sideOfTeam(team, d) {
@@ -246,11 +278,18 @@
             case 'save':
                 return { x: goalX - attack * 3, y: 50 + ((playIndex % 3) - 1) * 6 };
             case 'shot':
+            case 'oneonone':
                 return { x: boxX, y: lastPt ? clamp(lastPt.y, 28, 72) : 50 };
             case 'box':
                 return { x: boxX, y: lastPt ? clamp(lastPt.y, 22, 78) : 50 };
             case 'wing':
                 return nearPlayer(side === 'home' ? 70 : 30, wingY, true);
+            case 'throwin':
+                return { x: lastPt ? clamp(lastPt.x, 12, 88) : (side === 'home' ? 62 : 38), y: wingY };
+            case 'counter':
+                return { x: side === 'home' ? 78 : 22, y: lastPt ? clamp(lastPt.y, 18, 82) : 50 };
+            case 'clearance':
+                return { x: boxX, y: lastPt ? clamp(lastPt.y, 18, 82) : 50 };
             case 'foul':
                 return nearPlayer(side === 'home' ? 62 : 38, lastPt ? lastPt.y : 50, false);
             case 'yellow':
@@ -697,31 +736,44 @@
         var namedAtk = namedPlayers(players, play.players, attack);
         var shooter = namedAtk.length ? namedAtk[namedAtk.length - 1] : (ofPos(atk, 'FW')[0] || atk[atk.length - 1]);
         var assist = namedAtk.length > 1 ? namedAtk[namedAtk.length - 2] : null;
-        var shotX = opts.keepBall ? ballT.x : (attack === 'home' ? 86 : 14);
-        var shotY = clamp(ballT.y, 28, 72);
-        if (shooter) placeAt(shooter, shotX - dir * 3.2, shotY);
-        if (assist) placeAt(assist, shotX - dir * 9, clamp(shotY + (assist.baseY - 50) * 0.3, 18, 82));
+        var goalish = attack === 'home' ? 86 : 14;
+        if (opts.oneOnOne) goalish = opts.approach ? (attack === 'home' ? 68 : 32) : (attack === 'home' ? 80 : 20);
+        var shotX = opts.keepBall ? ballT.x : goalish;
+        var shotY = clamp(ballT.y, opts.oneOnOne ? 22 : 28, opts.oneOnOne ? 78 : 72);
+        if (shooter) placeAt(shooter, shotX - dir * (opts.oneOnOne ? 2.2 : 3.2), shotY);
+        if (assist) placeAt(assist, shotX - dir * (opts.oneOnOne ? 14 : 9), clamp(shotY + (assist.baseY - 50) * 0.35, 16, 84));
         namedAtk.forEach(function (p, i) {
             if (p === shooter || p === assist) return;
-            placeAt(p, shotX - dir * (12 + i * 3), clamp(p.baseY * 0.4 + shotY * 0.6, 16, 84));
+            placeAt(p, shotX - dir * (opts.oneOnOne ? (16 + i * 4) : (12 + i * 3)), clamp(p.baseY * 0.4 + shotY * 0.6, 16, 84));
         });
         var gk = ofPos(def, 'GK')[0];
         if (gk) {
-            var come = opts.oneOnOne ? 9 : 1.5;
+            var come = opts.oneOnOne ? (opts.approach ? 5 : 12) : 1.5;
             placeAt(gk, (attack === 'home' ? 97 : 3) - dir * come, clamp(shotY, 36, 64));
         }
         var markers = def.filter(function (p) { return p.pos !== 'GK'; }).sort(function (a, b) {
             return Math.abs(a.baseY - shotY) - Math.abs(b.baseY - shotY);
         });
-        markers.slice(0, 3).forEach(function (p, i) {
-            placeAt(p, shotX + dir * (2 + i), clamp(shotY + (i - 1) * 8, 18, 82));
-        });
         if (opts.oneOnOne) {
-            def.filter(function (p) { return p.pos !== 'GK' && markers.slice(0, 1).indexOf(p) === -1; }).forEach(function (p) {
-                placeAt(p, p.tx - dir * 8, p.ty);
+            // Un solo último defensor, al costado y un poco por detrás del atacante; el resto, rezagado.
+            if (markers[0]) {
+                placeAt(markers[0], shotX + dir * (opts.approach ? 10 : 5.5), clamp(shotY + (markers[0].baseY >= shotY ? 7 : -7), 16, 84));
+            }
+            markers.slice(1).forEach(function (p, i) {
+                var back = opts.approach ? (10 + i * 3) : (16 + i * 4);
+                placeAt(p, clamp(shotX - dir * back, 8, 92), clamp(lerp(p.baseY, shotY, 0.15) + (i % 2 ? 12 : -12), 10, 90));
+            });
+        } else {
+            markers.slice(0, 3).forEach(function (p, i) {
+                placeAt(p, shotX + dir * (2 + i), clamp(shotY + (i - 1) * 8, 18, 82));
             });
         }
-        var boxSpotsAtk = [
+        var boxSpotsAtk = opts.oneOnOne ? [
+            [shotX - dir * 12, clamp(shotY - 18, 14, 86)],
+            [shotX - dir * 14, clamp(shotY + 18, 14, 86)],
+            [shotX - dir * 20, 32],
+            [shotX - dir * 20, 68]
+        ] : [
             [shotX + dir * 4, clamp(shotY - 14, 16, 84)],
             [shotX + dir * 5, clamp(shotY + 14, 16, 84)],
             [shotX - dir * 6, 30],
@@ -903,24 +955,43 @@
         });
         var agk = ofPos(ofSide(players, attack), 'GK')[0];
         if (agk) placeAt(agk, attack === 'home' ? 14 : 86, 50);
-        ofSide(players, attack === 'home' ? 'away' : 'home').forEach(function (p) {
+        function pushOutOfHuddle(p, rx, ry) {
+            if (!p || p.pos === 'GK') return;
+            var dx = p.tx - meetX, dy = p.ty - cornerY;
+            var dist = Math.hypot(dx / rx, dy / ry);
+            if (dist >= 1) return;
+            var ux = dx, uy = dy;
+            if (Math.hypot(ux, uy) < 0.5) {
+                ux = (50 - meetX) || (p.baseX - meetX) || 1;
+                uy = (50 - cornerY) * 0.4 + (p.baseY - cornerY) * 0.2;
+            }
+            // Preferir el lado del mediocampo, no el córner de la celebración.
+            if ((meetX > 50 && ux > 0) || (meetX < 50 && ux < 0)) ux = -ux || (50 - meetX);
+            var ang = Math.atan2(uy / ry, ux / rx);
+            placeAt(p, meetX + Math.cos(ang) * rx, clamp(cornerY + Math.sin(ang) * ry, 8, 92));
+        }
+        var defSide = attack === 'home' ? 'away' : 'home';
+        ofSide(players, defSide).forEach(function (p, i) {
             if (p.pos === 'GK') {
                 placeAt(p, attack === 'home' ? 95.5 : 4.5, clamp(lerp(50, ballT.y, 0.12), 38, 62));
-            } else {
-                placeAt(p, lerp(p.tx, p.baseX, 0.8), lerp(p.ty, p.baseY, 0.8));
-                var dx = p.tx - meetX, dy = p.ty - cornerY;
-                var dist = Math.hypot(dx / 18, dy / 24);
-                if (dist < 1.2) {
-                    var ux = Math.abs(dx) + Math.abs(dy) < 0.4 ? (p.baseX - meetX) : dx;
-                    var uy = Math.abs(dx) + Math.abs(dy) < 0.4 ? (p.baseY - cornerY) : dy;
-                    var len = Math.hypot(ux, uy) || 1;
-                    placeAt(p, meetX + (ux / len) * 24, clamp(cornerY + (uy / len) * 28, 8, 92));
-                }
+                return;
             }
+            // Se retiran hacia el mediocampo / su campo, repartidos, lejos del corro.
+            var retreatX = attack === 'home'
+                ? 30 + (p.pos === 'FW' ? 8 : p.pos === 'AM' || p.pos === 'MF' ? 4 : 0)
+                : 70 - (p.pos === 'FW' ? 8 : p.pos === 'AM' || p.pos === 'MF' ? 4 : 0);
+            var midY = 50 + (50 - cornerY) * 0.42;
+            var spreadY = clamp(lerp(p.baseY, midY, 0.55) + ((i % 5) - 2) * 7, 10, 90);
+            placeAt(p, retreatX + (p.baseY - 50) * 0.05, spreadY);
+            pushOutOfHuddle(p, 38, 48);
         });
         var pin = {};
         if (scorer) pin[keyOf(scorer.side, scorer.name)] = true;
+        mates.forEach(function (p) { pin[keyOf(p.side, p.name)] = true; });
+        var agkKey = agk ? keyOf(agk.side, agk.name) : null;
+        if (agkKey) pin[agkKey] = true;
         separate(players, { minX: 8.4, minY: 15.2, rounds: 8, pinned: pin });
+        ofSide(players, defSide).forEach(function (p) { pushOutOfHuddle(p, 38, 48); });
         return { scorer: scorer };
     }
 
@@ -1005,33 +1076,178 @@
         return { x: 99.2, y: y < 50 ? 18 : 82 };
     }
 
-    function setupCounter(players, play, attack, ballT) {
+    function setupCounter(players, play, attack, ballT, opts) {
+        opts = opts || {};
+        var start = !!opts.start;
         var dir = attack === 'home' ? 1 : -1;
+        var defSide = attack === 'home' ? 'away' : 'home';
         var namedAtk = namedPlayers(players, play.players, attack);
+        var carrier = namedAtk[namedAtk.length - 1] || namedAtk[0] || ofPos(ofSide(players, attack), 'FW')[0];
+        var recoverX = attack === 'home' ? 36 : 64;
+        var arriveX = attack === 'home'
+            ? clamp(Math.max(ballT.x, 70), 64, 86)
+            : clamp(Math.min(ballT.x, 30), 14, 36);
+        var runY = clamp(ballT.y, 18, 82);
+
         ofSide(players, attack).forEach(function (p) {
-            var rf = ROLE_PUSH[p.pos] || 0.8;
-            placeAt(p, clamp(p.baseX + dir * (10 + rf * 8), 5, 95), lerp(p.baseY, ballT.y, 0.35));
+            if (p.pos === 'GK') {
+                placeAt(p, attack === 'home' ? 8 : 92, clamp(lerp(50, runY, 0.1), 38, 62));
+                return;
+            }
+            if (start) {
+                placeAt(p, clamp(lerp(p.baseX, recoverX, 0.38) + dir * 2, 6, 94), lerp(p.baseY, runY, 0.22));
+            } else {
+                var boost = { DF: 8, DM: 14, MF: 20, AM: 26, FW: 32 };
+                placeAt(p, clamp(p.baseX + dir * (boost[p.pos] || 18), 8, 92), lerp(p.baseY, runY, 0.42));
+            }
         });
-        ofSide(players, attack === 'home' ? 'away' : 'home').forEach(function (p) {
-            var rf = ROLE_PUSH[p.pos] || 0.8;
-            placeAt(p, clamp(p.baseX + dir * (8 + rf * 3), 5, 95), lerp(p.baseY, ballT.y, 0.2));
+
+        ofSide(players, defSide).forEach(function (p) {
+            if (p.pos === 'GK') {
+                placeAt(p, (attack === 'home' ? 96 : 4) - dir * (start ? 1.2 : 5), clamp(runY, 36, 64));
+                return;
+            }
+            if (start) {
+                // Línea alta: acababan de atacar y quedan pillados.
+                var high = { FW: -4, AM: -8, MF: -12, DM: -14, DF: -18 };
+                placeAt(p, clamp(p.baseX + dir * (high[p.pos] || -10), 8, 92), lerp(p.baseY, runY, 0.12));
+            } else {
+                // Recuperan de forma escalonada: delanteros aún lejos, algún central más cerca.
+                var chase = { FW: 16, AM: 18, MF: 12, DM: 8, DF: 6 };
+                placeAt(p, clamp(p.baseX + dir * (chase[p.pos] || 10), 8, 92), lerp(p.baseY, runY, 0.22));
+            }
         });
-        var carrier = namedAtk[namedAtk.length - 1] || namedAtk[0];
-        if (carrier) placeAt(carrier, clamp(ballT.x, 8, 92), clamp(ballT.y, 12, 88));
+
+        var individual = /contraataque individual|contra individual/.test(String((play && play.text) || '').toLowerCase());
+        var cx = start ? recoverX : arriveX;
+        if (carrier) placeAt(carrier, cx, runY);
         namedAtk.forEach(function (p, i) {
             if (p === carrier) return;
-            placeAt(p, clamp(ballT.x - dir * (8 + i * 5), 8, 92), clamp(ballT.y + (i % 2 ? 10 : -10), 10, 90));
+            var back = start ? (6 + i * 4) : ((individual ? 16 : 11) + i * 6);
+            var lane = (i % 2 ? 1 : -1) * (12 + (i > 1 ? 6 : 0));
+            placeAt(p, clamp(cx - dir * back, 8, 92), clamp(runY + lane, 10, 90));
         });
-        return { carrier: carrier, chain: namedAtk };
+        // En un contra individual el resto del ataque no se mete en el área: queda en carrera, más atrás.
+        if (!start && individual) {
+            ofSide(players, attack).forEach(function (p) {
+                if (p === carrier || p.pos === 'GK' || namedAtk.indexOf(p) !== -1) return;
+                if ((p.pos === 'FW' || p.pos === 'AM') && ((attack === 'home' && p.tx > 70) || (attack === 'away' && p.tx < 30))) {
+                    placeAt(p, clamp(p.tx - dir * 14, 10, 90), p.ty);
+                }
+            });
+        }
+
+        if (!start) {
+            var covers = ofSide(players, defSide).filter(function (p) { return p.pos === 'DF' || p.pos === 'DM'; })
+                .sort(function (a, b) { return Math.abs(a.baseY - runY) - Math.abs(b.baseY - runY); });
+            if (covers[0]) placeAt(covers[0], clamp(arriveX + dir * 6, 10, 90), clamp(runY + (covers[0].baseY > runY ? 6 : -6), 14, 86));
+            if (covers[1]) placeAt(covers[1], clamp(arriveX + dir * 2, 10, 90), clamp(runY + (runY < 50 ? 16 : -16), 12, 88));
+        }
+        return { carrier: carrier, chain: namedAtk, recoverX: recoverX, arriveX: arriveX, runY: runY };
     }
 
-    function setupClearance(players, play, attack, ballT) {
-        var named = namedPlayers(players, play.players);
-        var clearer = named[0] || ofPos(ofSide(players, attack === 'home' ? 'away' : 'home'), 'DF')[0];
-        if (clearer) placeAt(clearer, clamp(ballT.x, 8, 92), clamp(ballT.y, 12, 88));
-        var awayX = clearer ? clamp(50 + (50 - clearer.tx) * 0.7, 18, 82) : 50;
-        var awayY = clearer ? clamp(100 - clearer.ty, 12, 88) : 22;
-        return { clearer: clearer, landing: { x: awayX, y: awayY } };
+    function setupClearance(players, play, attack, ballT, opts) {
+        opts = opts || {};
+        var text = String((play && play.text) || '').toLowerCase();
+        var dir = attack === 'home' ? 1 : -1;
+        var defSide = attack === 'home' ? 'away' : 'home';
+        var punch = /puñetaz|a puños|de puños/.test(text);
+        var toCrowd = /a la grada|a la nada/.test(text);
+        var namedDef = namedPlayers(players, play.players, defSide);
+        var namedAll = namedPlayers(players, play.players);
+        var gk = ofPos(ofSide(players, defSide), 'GK')[0];
+        var clearer = (punch && gk) ? gk : (namedDef[0] || namedAll[0] || ofPos(ofSide(players, defSide), 'DF')[0]);
+        var boxX = attack === 'home' ? 88 : 12;
+        var clrX = clamp(ballT.x || boxX, attack === 'home' ? 76 : 4, attack === 'home' ? 96 : 24);
+        var clrY = clamp(ballT.y, 16, 84);
+        if (punch && gk) {
+            clrX = attack === 'home' ? 94.5 : 5.5;
+            clrY = clamp(ballT.y, 32, 68);
+        }
+
+        ofSide(players, attack).forEach(function (p, i) {
+            if (p.pos === 'GK') {
+                placeAt(p, attack === 'home' ? 10 : 90, 50);
+                return;
+            }
+            var ax = boxX - dir * (p.pos === 'FW' ? 2 : p.pos === 'AM' || p.pos === 'MF' ? 8 : 16);
+            var ay = clamp(lerp(p.baseY, clrY, 0.45) + ((i % 4) - 1.5) * 5, 12, 88);
+            placeAt(p, clamp(ax, 8, 92), ay);
+        });
+        ofSide(players, defSide).forEach(function (p, i) {
+            if (p.pos === 'GK') {
+                if (p !== clearer) placeAt(p, attack === 'home' ? 96 : 4, clamp(clrY, 36, 64));
+                return;
+            }
+            var dx = boxX - dir * (p.pos === 'DF' ? 3 : 9);
+            placeAt(p, clamp(dx, 6, 94), clamp(lerp(p.baseY, clrY, 0.4) + ((i % 3) - 1) * 6, 12, 88));
+        });
+        if (clearer) placeAt(clearer, clrX, clrY);
+
+        var landing;
+        if (toCrowd) {
+            landing = { x: clamp(clrX - dir * 10, 8, 92), y: clrY < 50 ? 2 : 98 };
+        } else {
+            landing = {
+                x: clamp(clrX - dir * (opts.flight ? 42 : 30), 16, 84),
+                y: clamp((opts.flight ? (100 - clrY) : lerp(clrY, 100 - clrY, 0.55)), 12, 88)
+            };
+        }
+        if (opts.flight) {
+            ofPos(ofSide(players, attack), 'MF').concat(ofPos(ofSide(players, defSide), 'MF')).forEach(function (p, i) {
+                placeAt(p, lerp(p.tx, landing.x, 0.28), lerp(p.ty, landing.y, 0.28 + (i % 3) * 0.05));
+            });
+        }
+        return { clearer: clearer, landing: landing, punch: punch };
+    }
+
+    function setupThrowIn(players, play, attack, ballT) {
+        var dir = attack === 'home' ? 1 : -1;
+        var defSide = attack === 'home' ? 'away' : 'home';
+        var yLine = ballT.y < 50 ? 3.2 : 96.8;
+        var inward = ballT.y < 50 ? 1 : -1;
+        var x = clamp(ballT.x, 12, 88);
+        var namedAtk = namedPlayers(players, play.players, attack);
+        var namedAll = namedPlayers(players, play.players);
+        var thrower = namedAtk[0] || namedAll[0] || ofPos(ofSide(players, attack), 'DF')[0];
+        var receiver = null;
+        namedAtk.forEach(function (p) { if (p !== thrower && !receiver) receiver = p; });
+        if (!receiver && namedAll[1] && namedAll[1] !== thrower) receiver = namedAll[1];
+
+        // Bloque medio corrido hacia la banda, sin apretarse en la línea.
+        players.forEach(function (p) {
+            if (p.pos === 'GK') {
+                placeAt(p, p.side === 'home' ? 8 : 92, clamp(lerp(50, yLine, 0.08), 36, 64));
+                return;
+            }
+            placeAt(p, clamp(lerp(p.baseX, x, 0.22) + (p.side === attack ? dir * 3 : -dir * 1), 8, 92),
+                clamp(lerp(p.baseY, yLine + inward * 22, 0.35), 10, 90));
+        });
+        if (thrower) placeAt(thrower, x, yLine);
+        var recvX = clamp(x + dir * 4, 10, 90);
+        var recvY = yLine + inward * 8.5;
+        if (receiver) placeAt(receiver, recvX, recvY);
+        // Opción corta detrás y una más larga hacia delante.
+        var mates = ofSide(players, attack).filter(function (p) { return p !== thrower && p !== receiver && p.pos !== 'GK'; });
+        if (mates[0]) placeAt(mates[0], clamp(x - dir * 7, 10, 90), yLine + inward * 7);
+        if (mates[1]) placeAt(mates[1], clamp(x + dir * 14, 10, 90), yLine + inward * 11);
+        if (mates[2]) placeAt(mates[2], clamp(x + dir * 8, 10, 90), yLine + inward * 22);
+        // Marcas rivales sobre los que esperan el saque.
+        var marks = ofSide(players, defSide).filter(function (p) { return p.pos !== 'GK'; })
+            .sort(function (a, b) { return Math.abs(a.baseY - yLine) - Math.abs(b.baseY - yLine); });
+        var targets = [receiver, mates[0], mates[1]].filter(Boolean);
+        targets.forEach(function (t, i) {
+            if (marks[i]) placeAt(marks[i], t.tx + dir * 2.2, t.ty + inward * 3.2);
+        });
+        var pin = {};
+        if (thrower) pin[keyOf(thrower.side, thrower.name)] = true;
+        return {
+            thrower: thrower,
+            receiver: receiver,
+            start: { x: x, y: yLine },
+            end: receiver ? { x: receiver.tx, y: receiver.ty } : { x: recvX, y: recvY },
+            pin: pin
+        };
     }
 
     function setupKickoff(players) {
@@ -1112,9 +1328,10 @@
         var phases = [];
         var info;
         var highlight = play.players || [];
-        var oneOnOne = /frente a porter[ií]a|mano a mano|solo ante|se planta/.test(text.toLowerCase());
+        var oneOnOne = isOneOnOneText(text);
+        var alsoCounter = isCounterText(text);
 
-        if (kind !== 'shootout' && kind !== 'shootout-kick') {
+        if (kind !== 'shootout' && kind !== 'shootout-kick' && kind !== 'throwin' && kind !== 'counter' && kind !== 'clearance') {
             applyBlock(players, ballT, attack, kind);
         }
 
@@ -1150,20 +1367,40 @@
                 }
             }
         } else if (kind === 'counter') {
-            info = setupCounter(players, play, attack, ballT);
+            info = setupCounter(players, play, attack, ballT, { start: true });
             separate(players);
-            var cpath = [];
-            (info.chain || []).forEach(function (p) { cpath.push({ x: p.tx, y: p.ty }); });
+            var cStart = info.carrier ? { x: info.carrier.tx, y: info.carrier.ty } : { x: info.recoverX, y: info.runY };
+            phases.push({ players: snapshotTargets(players), ballPath: [cStart], ms: 620, highlight: highlight });
+            info = setupCounter(players, play, attack, ballT, { start: false });
+            separate(players);
+            var cpath = [cStart];
+            (info.chain || []).forEach(function (p) { if (p !== info.carrier) cpath.push({ x: p.tx, y: p.ty }); });
             if (info.carrier) cpath.push({ x: info.carrier.tx, y: info.carrier.ty });
-            if (!cpath.length) cpath.push(ballT);
-            phases.push({ players: snapshotTargets(players), ballPath: cpath, ms: 850, highlight: highlight });
+            if (cpath.length < 2) cpath.push({ x: info.arriveX, y: info.runY });
+            phases.push({ players: snapshotTargets(players), ballPath: cpath, ms: 900, highlight: highlight });
         } else if (kind === 'clearance') {
-            info = setupClearance(players, play, attack, ballT);
+            info = setupClearance(players, play, attack, ballT, { flight: false });
+            separate(players, { pinned: info.clearer ? (function () { var o = {}; o[keyOf(info.clearer.side, info.clearer.name)] = true; return o; })() : {} });
+            var clFrom = info.clearer ? { x: info.clearer.tx, y: info.clearer.ty } : ballT;
+            phases.push({ players: snapshotTargets(players), ballPath: [clFrom], ms: 550, highlight: highlight });
+            info = setupClearance(players, play, attack, ballT, { flight: true });
             separate(players);
-            var clPath = [];
-            if (info.clearer) clPath.push({ x: info.clearer.tx, y: info.clearer.ty });
-            clPath.push(info.landing || { x: 50, y: 50 });
-            phases.push({ players: snapshotTargets(players), ballPath: clPath, ms: 750, highlight: highlight });
+            var midAir = { x: lerp(clFrom.x, info.landing.x, 0.5), y: lerp(clFrom.y, info.landing.y, 0.5) - 8 };
+            phases.push({ players: snapshotTargets(players), ballPath: [clFrom, midAir, info.landing], ms: 820, highlight: highlight });
+        } else if (kind === 'throwin') {
+            info = setupThrowIn(players, play, attack, ballT);
+            separate(players, { pinned: info.pin || {}, freezeGK: true });
+            phases.push({ players: snapshotTargets(players), ballPath: [info.start], ms: 550, highlight: highlight });
+            if (info.receiver) {
+                // El receptor da un paso al recibir.
+                placeAt(info.receiver, lerp(info.receiver.tx, 50, 0.04), lerp(info.receiver.ty, 50, 0.04));
+            }
+            phases.push({
+                players: snapshotTargets(players),
+                ballPath: [info.start, { x: lerp(info.start.x, info.end.x, 0.55), y: lerp(info.start.y, info.end.y, 0.55) }, info.end],
+                ms: 700,
+                highlight: highlight
+            });
         } else if (kind === 'corner') {
             info = setupCorner(players, play, attack, ballT);
             separate(players);
@@ -1171,6 +1408,18 @@
             if (info.taker) cornerPath.push({ x: info.taker.tx, y: info.taker.ty });
             cornerPath.push({ x: attack === 'home' ? 90 : 10, y: 50 });
             phases.push({ players: snapshotTargets(players), ballPath: cornerPath, ms: 850, highlight: highlight });
+            if (/despej/.test(text.toLowerCase())) {
+                var clInfo = setupClearance(players, play, attack, ballT, { flight: true });
+                separate(players);
+                var cFrom = cornerPath[cornerPath.length - 1];
+                var cLand = clInfo.landing || { x: 50, y: 22 };
+                phases.push({
+                    players: snapshotTargets(players),
+                    ballPath: [cFrom, { x: lerp(cFrom.x, cLand.x, 0.5), y: lerp(cFrom.y, cLand.y, 0.5) - 8 }, cLand],
+                    ms: 800,
+                    highlight: highlight
+                });
+            }
         } else if (kind === 'penalty') {
             info = setupPenalty(players, play, attack);
             separate(players);
@@ -1218,14 +1467,26 @@
             phases.push({ players: snapshotTargets(players), ballPath: [ballT], ms: 1000, highlight: highlight, pose: true });
             setupKickoff(players);
             phases.push({ players: snapshotTargets(players), ballPath: [{ x: 50, y: 50 }], ms: 900, highlight: [], pose: false });
-        } else if (kind === 'shot' || kind === 'save' || kind === 'box' || kind === 'goal') {
-            info = setupShotShape(players, play, attack, ballT, { oneOnOne: oneOnOne });
+        } else if (kind === 'shot' || kind === 'save' || kind === 'box' || kind === 'goal' || kind === 'oneonone') {
+            var asOne = oneOnOne || kind === 'oneonone';
+            if (alsoCounter) {
+                info = setupCounter(players, play, attack, ballT, { start: true });
+                separate(players);
+                var c0 = info.carrier ? { x: info.carrier.tx, y: info.carrier.ty } : { x: info.recoverX, y: info.runY };
+                phases.push({ players: snapshotTargets(players), ballPath: [c0], ms: 580, highlight: highlight });
+            } else if (asOne) {
+                info = setupShotShape(players, play, attack, ballT, { oneOnOne: true, approach: true });
+                separate(players);
+                var ap = info.shooter ? { x: info.shooter.tx, y: info.shooter.ty } : (info.shot || ballT);
+                phases.push({ players: snapshotTargets(players), ballPath: [ap], ms: 580, highlight: highlight });
+            }
+            info = setupShotShape(players, play, attack, ballT, { oneOnOne: asOne });
             separate(players);
             var path = [];
             (info.namedAtk || []).forEach(function (p) { path.push({ x: p.tx, y: p.ty }); });
             if (info.shot) path.push(info.shot);
             if (!path.length) path.push(ballT);
-            phases.push({ players: snapshotTargets(players), ballPath: path.slice(), ms: 800, highlight: highlight });
+            phases.push({ players: snapshotTargets(players), ballPath: path.slice(), ms: alsoCounter || asOne ? 900 : 800, highlight: highlight });
             if (kind === 'save' && info.gk) {
                 phases.push({
                     players: snapshotTargets(players),
@@ -1282,6 +1543,13 @@
         else if (kind === 'penalty') spot = { x: bx < 50 ? 18.5 : 81.5, y: 64 };
         else if (kind === 'foul') spot = { x: clamp(bx - 3.5, 10, 90), y: clamp(by + 9, 12, 88) };
         else if (kind === 'goalkick') spot = { x: bx < 50 ? 30 : 70, y: 60 };
+        else if (kind === 'throwin') spot = { x: clamp(bx - 5, 12, 88), y: by < 50 ? 16 : 84 };
+        else if (kind === 'clearance') spot = { x: clamp(bx - (bx >= 50 ? 8 : -8), 12, 88), y: clamp(by + (by >= 50 ? -9 : 9), 14, 86) };
+        else if (kind === 'counter') {
+            var behindC = bx >= 50 ? -9 : 9;
+            var sideC = by >= 50 ? -10 : 10;
+            spot = { x: clamp(bx + behindC, 12, 88), y: clamp(by + sideC, 14, 86) };
+        }
         else if (kind === 'sub' || kind === 'yellow' || kind === 'red' || kind === 'injury') {
             spot = { x: clamp(bx + 6, 10, 90), y: clamp(by + 7, 12, 88) };
         } else if (typ === 'celebrate' || kind === 'goal' || kind === 'own-goal') {
@@ -1362,7 +1630,9 @@
             'font-size': '11', 'font-weight': '700', 'font-family': 'Segoe UI, sans-serif',
             'pointer-events': 'none', 'class': 'campo-name'
         });
-        tName.textContent = short;
+        tName.setAttribute('data-full', short);
+        tName.setAttribute('data-short', shortName(name, null, true) || short);
+        tName.textContent = isCompactView() ? (tName.getAttribute('data-short') || short) : short;
         g.appendChild(tName);
         return g;
     }
@@ -1522,6 +1792,11 @@
         ui.play.addEventListener('click', onPlayClick);
         ui.slider.addEventListener('input', onSliderInput);
         ui.slider.addEventListener('change', onSliderChange);
+        if (!window.__campoResizeBound) {
+            window.__campoResizeBound = true;
+            window.addEventListener('resize', function () { applyCompactNames(); });
+        }
+        applyCompactNames();
         built = true;
         return true;
     }
@@ -1613,7 +1888,7 @@
         var plays = buildPlays(d);
         var idx = parseInt(ui.slider.value, 10) || 0;
         var play = plays[idx];
-        if (play) applyPlayPreview(play, d, false);
+        if (play) applyPlayPreview(play, d, true);
     }
 
     function onSliderChange() {
@@ -1736,6 +2011,7 @@
             });
         }
         ensureRef(d);
+        applyCompactNames();
     }
 
     function hexRgb(hex) {
@@ -1830,7 +2106,11 @@
             'pointer-events': 'none',
             'class': 'campo-name'
         });
-        tName.textContent = shortName(p.name, d.formatName);
+        var fullN = shortName(p.name, d.formatName);
+        var shortN = shortName(p.name, d.formatName, true);
+        tName.setAttribute('data-full', fullN);
+        tName.setAttribute('data-short', shortN);
+        tName.textContent = isCompactView() ? shortN : fullN;
         g.appendChild(tName);
         g.addEventListener('click', function () {
             if (typeof window.showPlayerPopupById === 'function') window.showPlayerPopupById(p.name);
@@ -1983,7 +2263,13 @@
     window.Campo = {
         refresh: refresh,
         onShow: onShow,
-        resetView: resetView
+        resetView: resetView,
+        debugPlays: function () {
+            var d = data();
+            return buildPlays(d).map(function (p) {
+                return { i: p.i, minute: p.minute, kind: p.kind, team: p.team, text: (p.text || '').slice(0, 220), players: p.players, target: p.target };
+            });
+        }
     };
 
     if (document.readyState === 'loading') {
