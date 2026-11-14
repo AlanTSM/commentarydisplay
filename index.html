@@ -4723,6 +4723,25 @@
             return hasVs && hasLineups && hasNarration;
         }
         
+        // Limpia la cabecera de un informe pegado tal cual desde el foro (esms_plus):
+        // «Resultados … Icon_minitimeJue 07 Mayo 2026, 01:53   Club América vs Nacional Montevideo:Torneo Apertura, America CF vs. Nacional (Wed May 06)»
+        // -> «Torneo Apertura, America CF vs. Nacional (Wed May 06)». Una cabecera normal no cambia.
+        function cleanReportHeader(header) {
+            let h = String(header || '');
+            const vsAt = h.indexOf(' vs. ');
+            if (vsAt === -1) return h;
+            let before = h.slice(0, vsAt);
+            const after = h.slice(vsAt);
+            // 1) Fecha y hora del mensaje del foro («Icon_minitime… 2026, 01:53»).
+            before = before.replace(/^.*Icon_minitime.*?\d{4},\s*\d{1,2}:\d{2}\s+/, '');
+            // 2) Hora suelta al principio («01:53 Club América vs …»).
+            before = before.replace(/^\s*\d{1,2}:\d{2}\s+/, '');
+            // 3) Título del tema del foro «Local vs Visitante:» delante de «Competición, Local».
+            const m = before.match(/^(.*?\svs\s[^:]*):\s*(.+,\s*.+)$/);
+            if (m) before = m[2];
+            return (before + after).trim();
+        }
+
         function detectMatches(inputText) {
             const lines = inputText.split('\n');
             const matches = [];
@@ -4743,8 +4762,9 @@
             
             const validMatches = [];
             matches.forEach(m => {
-                const headerLine = lines[m.start].trim();
-                const teamsMatch = headerLine.match(/(.+?)\s+vs\.\s+(.+?)\s+\(/);
+                const headerLine = cleanReportHeader(lines[m.start].trim());
+                const hdrComma = headerLine.indexOf(',');
+                const teamsMatch = (hdrComma !== -1 ? headerLine.slice(hdrComma + 1) : headerLine).match(/(.+?)\s+vs\.\s+(.+?)\s+\(/);
                 if (teamsMatch) {
                     validMatches.push({ start: m.start, end: m.end, home: teamsMatch[1].trim(), away: teamsMatch[2].trim() });
                 }
@@ -6823,7 +6843,7 @@
             const lines = input.split('\n');
             let i = 0;
             while (i < lines.length && lines[i].trim() === '') i++;
-            let fullHeader = lines[i].trim();
+            let fullHeader = cleanReportHeader(lines[i].trim());
             fullHeader = fullHeader.replace(/\b(?=[A-Z]{2,})(?=.*[a-z])(?=.*\d)[A-Za-z\d]+\b/g, '');
             fullHeader = fullHeader.replace(/ +/g, ' ').trim();
             const commaIndex = fullHeader.indexOf(',');

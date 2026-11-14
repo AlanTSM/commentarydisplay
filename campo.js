@@ -831,6 +831,79 @@
                 p.ty = clamp(50 + (ballT.y - 50) * 0.22, 32, 68);
             }
         });
+        if (kind === 'goalkick' || kind === 'penalty' || kind === 'corner') return;
+        shiftDefence(players, ballT, attackSide);
+    }
+
+    // Basculación: el equipo que defiende se corre hacia el lado del balón y se estrecha
+    // (bloque compacto); la línea de defensas queda plana y el lateral del lado del balón sale.
+    // El que ataca abre el campo: los de banda contraria se quedan abiertos para el cambio de juego.
+    function shiftDefence(players, ballT, attackSide) {
+        var defSide = attackSide === 'home' ? 'away' : 'home';
+        var def = ofSide(players, defSide).filter(function (p) { return p.pos !== 'GK'; });
+        var atk = ofSide(players, attackSide).filter(function (p) { return p.pos !== 'GK'; });
+        var shift = (ballT.y - 50) * 0.55;
+        def.forEach(function (p) {
+            p.ty = clamp(50 + shift + (p.baseY - 50) * 0.7, 6, 94);
+        });
+        var dfs = def.filter(function (p) { return p.pos === 'DF'; });
+        if (dfs.length >= 2) {
+            var mean = dfs.reduce(function (a, p) { return a + p.tx; }, 0) / dfs.length;
+            dfs.forEach(function (p) { p.tx = lerp(p.tx, mean, 0.75); });
+            var near = dfs.slice().sort(function (a, b) { return Math.abs(a.ty - ballT.y) - Math.abs(b.ty - ballT.y); })[0];
+            if (near && Math.abs(near.ty - ballT.y) < 30) {
+                placeAt(near, lerp(near.tx, ballT.x, 0.18), lerp(near.ty, ballT.y, 0.3));
+            }
+        }
+        atk.forEach(function (p) {
+            var wide = Math.abs(p.baseY - 50) > 22;
+            var farSide = (p.baseY - 50) * (ballT.y - 50) < 0;
+            if (wide && farSide) p.ty = clamp(lerp(p.ty, p.baseY, 0.6), 6, 94);
+        });
+    }
+
+    // Después de colocar a los protagonistas: nadie del ataque (sin balón) se queda en fuera de juego
+    // ni por detrás del portero, y los que no intervienen buscan un hueco lejos de su marca (desmarque).
+    function naturalize(players, play, attack, ballT) {
+        var dir = attack === 'home' ? 1 : -1;
+        var defSide = attack === 'home' ? 'away' : 'home';
+        var named = {};
+        (play && play.players || []).forEach(function (n) { named[n] = true; });
+        var def = ofSide(players, defSide);
+        var gk = ofPos(def, 'GK')[0];
+        var outfield = def.filter(function (p) { return p.pos !== 'GK'; });
+        if (!outfield.length) return;
+        var line = Math.max.apply(null, outfield.map(function (p) { return dir * p.tx; }));
+        var ballD = dir * (ballT ? ballT.x : 50);
+        var cap = Math.max(line, ballD) + 0.8;
+        if (gk) cap = Math.min(cap, dir * gk.tx - 3.5);
+        // Mano a mano: el atacante va solo; sus compañeros llegan por detrás de él.
+        if (play && (play.kind === 'oneonone' || isOneOnOneText(play.text))) {
+            var lead = ofSide(players, attack).filter(function (p) { return named[p.name]; })
+                .reduce(function (a, p) { return Math.max(a, dir * p.tx); }, -999);
+            if (lead > -999) cap = Math.min(cap, lead - 5);
+        }
+        ofSide(players, attack).forEach(function (p) {
+            if (p.pos === 'GK' || named[p.name]) return;
+            if (dir * p.tx > cap) p.tx = clamp(cap / dir - dir * 0.6, 2.2, 97.8);
+            // Sin balón no se planta encima del balón.
+            if (ballT && Math.hypot((p.tx - ballT.x) / 3.5, (p.ty - ballT.y) / 6) < 1) {
+                p.ty = clamp(p.ty + (p.ty >= ballT.y ? 6 : -6), 8, 92);
+            }
+            // Desmarque: si tiene un rival encima y no participa, se separa hacia el hueco.
+            if (p.pos === 'FW' || p.pos === 'AM' || p.pos === 'MF') {
+                var m = null, md = 99;
+                outfield.forEach(function (q) {
+                    var dd = Math.hypot((q.tx - p.tx) / 6, (q.ty - p.ty) / 10);
+                    if (dd < md) { md = dd; m = q; }
+                });
+                if (m && md < 0.9) {
+                    var away = p.ty >= m.ty ? 1 : -1;
+                    p.ty = clamp(p.ty + away * (0.9 - md) * 9, 8, 92);
+                    if (dir * p.tx < cap - 2) p.tx = clamp(p.tx + dir * 1.2, 2.2, 97.8);
+                }
+            }
+        });
     }
 
     function separate(players, opts) {
@@ -910,7 +983,7 @@
                 placeAt(markers[0], shotX + dir * (opts.approach ? 10 : 5.5), clamp(shotY + (markers[0].baseY >= shotY ? 7 : -7), 16, 84));
             }
             markers.slice(1).forEach(function (p, i) {
-                var back = opts.approach ? (10 + i * 3) : (16 + i * 4);
+                var back = Math.min(opts.approach ? (10 + i * 2) : (14 + i * 2.2), 24);
                 placeAt(p, clamp(shotX - dir * back, 8, 92), clamp(lerp(p.baseY, shotY, 0.15) + (i % 2 ? 12 : -12), 10, 90));
             });
         } else {
@@ -1456,7 +1529,7 @@
     function kickoffLeadIn(players, kicker, highlight) {
         var phases = [];
         var info = setupKickoff(players, kicker);
-        phases.push({ players: snapshotTargets(players), ballPath: [{ x: 50, y: 50 }], ms: 650, highlight: [], pose: false, kickoff: true, ref: kickoffRefSpot(kicker) });
+        phases.push({ players: snapshotTargets(players), ballPath: [{ x: 50, y: 50 }], ms: 650, highlight: [], pose: false, kickoff: true, ref: refAvoid(kickoffRefSpot(kicker), snapshotTargets(players), { x: 50, y: 50 }) });
         var dir = kicker === 'home' ? 1 : -1;
         var recv = ofSide(players, kicker).filter(function (p) { return p.pos === 'MF' || p.pos === 'DM'; })
             .sort(function (a, b) { return Math.abs(a.ty - 50) - Math.abs(b.ty - 50); })[0];
@@ -1648,6 +1721,7 @@
             phases.push({ players: snapshotTargets(players), ballPath: penPath, ms: 700, highlight: highlight });
         } else if (kind === 'foul') {
             info = setupFoul(players, play, attack, ballT, text);
+            naturalize(players, play, attack, ballT);
             separate(players);
             var foulPath = [ballT];
             if (info.taker) foulPath.unshift({ x: info.taker.tx, y: info.taker.ty });
@@ -1659,6 +1733,7 @@
             phases.push({ players: snapshotTargets(players), ballPath: gkPath, ms: 650, highlight: highlight });
         } else if (kind === 'wing') {
             info = setupWing(players, play, attack, ballT);
+            naturalize(players, play, attack, ballT);
             separate(players);
             var wingPath = [ballT];
             if (info.carrier) wingPath.unshift({ x: info.carrier.tx, y: info.carrier.ty });
@@ -1700,6 +1775,7 @@
                 phases.push({ players: snapshotTargets(players), ballPath: [ap], ms: 580, highlight: highlight });
             }
             info = setupShotShape(players, play, attack, ballT, { oneOnOne: asOne });
+            naturalize(players, play, attack, info.shot || ballT);
             separate(players);
             var path = [];
             (info.namedAtk || []).forEach(function (p) { path.push({ x: p.tx, y: p.ty }); });
@@ -1741,6 +1817,7 @@
             }
         } else {
             info = setupPassShape(players, play, attack, ballT);
+            naturalize(players, play, attack, info.carrier ? { x: info.carrier.tx, y: info.carrier.ty } : ballT);
             separate(players);
             var passPath = [];
             (info.chain || []).forEach(function (p) { passPath.push({ x: p.tx, y: p.ty }); });
@@ -1786,11 +1863,56 @@
         return spot;
     }
 
+    // Aparta al árbitro de los jugadores y del balón (sigue cerca, pero sin tapar a nadie).
+    function refAvoid(spot, phPlayers, ballPt) {
+        var x = spot.x, y = spot.y, k, i, keys = Object.keys(phPlayers || {});
+        var sf = sepFactor();
+        var rx = 5.6 * sf, ry = 10 * sf;
+        for (k = 0; k < 6; k++) {
+            var moved = false;
+            for (i = 0; i < keys.length; i++) {
+                var q = phPlayers[keys[i]];
+                var dx = (x - q.x) / rx, dy = (y - q.y) / ry;
+                var d = Math.sqrt(dx * dx + dy * dy);
+                if (d < 1) {
+                    if (d < 0.05) { dx = 0; dy = y < 50 ? -1 : 1; d = 1; }
+                    x += dx / d * (1 - d) * rx * 1.05;
+                    y += dy / d * (1 - d) * ry * 1.05;
+                    moved = true;
+                }
+            }
+            if (ballPt) {
+                var bd = Math.hypot((x - ballPt.x) / 4, (y - ballPt.y) / 7);
+                if (bd < 1) { y += (y >= ballPt.y ? 1 : -1) * (1 - bd) * 7; moved = true; }
+            }
+            x = clamp(x, 3, 97); y = clamp(y, 5, 95);
+            if (!moved) break;
+        }
+        function clearance(px, py) {
+            var best = 99;
+            keys.forEach(function (kk) {
+                var q = phPlayers[kk];
+                best = Math.min(best, Math.hypot((px - q.x) / rx, (py - q.y) / ry));
+            });
+            return best;
+        }
+        if (clearance(x, y) >= 0.95 || !ballPt) return { x: x, y: y };
+        // Zona apiñada: probar puntos alrededor de la jugada (en diagonal, como un árbitro real)
+        // y quedarse con el más despejado, prefiriendo los más cercanos a la posición ideal.
+        var bestPt = { x: x, y: y }, bestScore = clearance(x, y);
+        [[-9, 14], [9, 14], [-9, -14], [9, -14], [-13, 6], [13, 6], [-13, -6], [13, -6], [-5, 20], [5, -20], [-16, 18], [16, -18]].forEach(function (o) {
+            var cx = clamp(ballPt.x + o[0], 3, 97), cy = clamp(ballPt.y + o[1], 5, 95);
+            var c = clearance(cx, cy) - Math.hypot(cx - spot.x, (cy - spot.y) * 0.6) * 0.012;
+            if (c > bestScore) { bestScore = c; bestPt = { x: cx, y: cy }; }
+        });
+        return bestPt;
+    }
+
     function attachReferee(phases, play, kind, ballT) {
         (phases || []).forEach(function (ph) {
             var pt = (ph.ballPath && ph.ballPath.length) ? ph.ballPath[ph.ballPath.length - 1] : (ballT || { x: 50, y: 50 });
             var typ = ph.pose === false ? 'kickoff' : (ph.pose ? 'celebrate' : '');
-            ph.ref = refereeSpot(play ? kind : null, pt, typ);
+            ph.ref = refAvoid(refereeSpot(play ? kind : null, pt, typ), ph.players, pt);
         });
     }
 
