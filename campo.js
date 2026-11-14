@@ -281,7 +281,58 @@
         return null;
     }
 
-    function inferTarget(kind, team, players, d, playIndex, text) {
+    /* ---- Izquierda / centro / derecha (L/C/R) a partir de la narración ----
+       Siempre desde el punto de vista del equipo que ataca (como en la radio: «banda izquierda»
+       es la izquierda del que ataca). El local ataca hacia la derecha de la pantalla, así que su
+       izquierda es la parte de arriba; para el visitante es al revés.
+       Se descartan las menciones que no hablan de la zona: pierna, pie, bota, guante, puño, palo,
+       la estirada del portero («hacia su izquierda»), «primer/segundo palo», «desde la banda» (banquillo)... */
+    var LANE_NOISE = /(?:pierna|pie|bota|guante|pu[nñ]o|palo|mano|tobillo|rodilla|muslo|hombro)\s+(?:izquierd[oa]|derech[oa])|(?:hacia|a|por)\s+su\s+(?:izquierda|derecha)|(?:con|de)\s+la\s+(?:izquierda|derecha)\b(?!\s+(?:del|de la)\s+(?:área|campo))|(?:primer|segundo)\s+palo|desde\s+la\s+(?:banda|l[ií]nea\s+de\s+banda)(?!\s+(?:izquierda|derecha))|fuera\s+de\s+banda|a\s+la\s+banda\b(?!\s+(?:izquierda|derecha))|derechazo|zurdazo|zurda/g;
+    var LANE_L = /(?:banda|extremo|costado|flanco|carril|lateral|perfil|sector|lado|v[ií]a|zona|pegado a la l[ií]nea)\s+izquierd[oa]|(?:por|hacia|a|desde|en)\s+la\s+izquierda|abre\s+(?:el\s+juego\s+)?(?:a|hacia)\s+la\s+izquierda|escorado\s+(?:a|en)\s+la\s+(?:banda\s+)?izquierda/;
+    var LANE_R = /(?:banda|extremo|costado|flanco|carril|lateral|perfil|sector|lado|v[ií]a|zona|pegado a la l[ií]nea)\s+derech[oa]|(?:por|hacia|a|desde|en)\s+la\s+derecha|abre\s+(?:el\s+juego\s+)?(?:a|hacia)\s+la\s+derecha|escorado\s+(?:a|en)\s+la\s+(?:banda\s+)?derecha/;
+    var LANE_C = /por\s+el\s+(?:centro|medio)|carril\s+central|zona\s+central|por\s+dentro|frontal\s+del\s+[aá]rea|en\s+la\s+frontal|pasillo\s+central|eje\s+central|por\s+el\s+coraz[oó]n/;
+    var LANE_SWITCH = /(?:la|esa)\s+otra\s+banda|en\s+la\s+otra\s+banda|cambia\s+(?:el\s+juego|de\s+orientaci[oó]n)|cambio\s+de\s+orientaci[oó]n|hacia\s+esa\s+banda|al\s+otro\s+lado|al\s+lado\s+contrario|banda\s+contraria/;
+    var LANE_WING = /banda|extremo|flanco|costado|carril|desborde|pegado a la l[ií]nea|línea de fondo|l[ií]nea de fondo/;
+
+    function laneHint(text, prevLane) {
+        var t = String(text || '').toLowerCase().replace(/\s+/g, ' ');
+        // «saque de banda» no indica lado; «desde la banda» suele ser el banquillo.
+        t = t.replace(LANE_NOISE, ' ');
+        // El banquillo: «el entrenador se desgañita en la banda», «aplaude desde la banda».
+        t = t.replace(/(?:entrenador|t[eé]cnico|banquillo|m[ií]ster|desga[nñ]ita|aplaude|instrucciones|no para de hablar)[^.\n]{0,40}banda/g, ' ');
+        function lastAt(re) {
+            var g = new RegExp(re.source, 'g'), m, at = -1;
+            while ((m = g.exec(t)) !== null) { at = m.index; if (m[0] === '') g.lastIndex++; }
+            return at;
+        }
+        var mL = lastAt(LANE_L), mR = lastAt(LANE_R), mC = lastAt(LANE_C);
+        var found = [];
+        if (mL >= 0) found.push({ lane: 'L', at: mL });
+        if (mR >= 0) found.push({ lane: 'R', at: mR });
+        if (mC >= 0) found.push({ lane: 'C', at: mC });
+        if (found.length) {
+            // Cuenta la última mención: es donde acaba la jugada («atrae por la izquierda y gira
+            // el juego a la derecha» termina en la derecha).
+            found.sort(function (a, b) { return b.at - a.at; });
+            return { lane: found[0].lane, src: 'text' };
+        }
+        if (LANE_SWITCH.test(t) && (prevLane === 'L' || prevLane === 'R')) {
+            return { lane: prevLane === 'L' ? 'R' : 'L', src: 'switch' };
+        }
+        if (LANE_WING.test(t.replace(/saque de banda/g, ''))) return { lane: 'W', src: 'wing' };
+        return { lane: null, src: null };
+    }
+
+    // y (0-100) de una banda para el equipo que ataca. depth: 0 = pegado a la línea, 1 = centro.
+    function laneY(lane, side, depth) {
+        var top = 10 + (depth || 0) * 38;
+        if (lane === 'C') return 50;
+        var leftIsTop = side !== 'away';
+        var isTop = lane === 'L' ? leftIsTop : !leftIsTop;
+        return isTop ? top : 100 - top;
+    }
+
+    function inferTarget(kind, team, players, d, playIndex, text, lane) {
         var side = sideOfTeam(team, d) || 'home';
         var attack = side === 'home' ? 1 : -1;
         var goalX = side === 'home' ? 97.5 : 2.5;
@@ -290,13 +341,16 @@
         var spotX = side === 'home' ? 89.5 : 10.5;
         var last = players && players.length ? players[players.length - 1] : null;
         var lastPt = last ? basePoint(last, d) : null;
-        var t = String(text || '').toLowerCase();
-        var left = /izquierda|primer palo/.test(t);
-        var right = /derecha|segundo palo/.test(t);
+        var hasLane = lane === 'L' || lane === 'R';
         var wingY;
-        if (left) wingY = 8;
-        else if (right) wingY = 92;
+        if (hasLane) wingY = laneY(lane, side, 0) < 50 ? 8 : 92;
         else wingY = (playIndex % 2 === 0) ? 8 : 92;
+        // Altura sugerida por la narración para jugadas que no son de banda.
+        function laneShift(y, depth, lo, hi) {
+            if (lane === 'C') return clamp(lerp(y, 50, 0.7), lo, hi);
+            if (hasLane) return clamp(laneY(lane, side, depth), lo, hi);
+            return clamp(y, lo, hi);
+        }
 
         function nearPlayer(fallbackX, fallbackY, towardGoal) {
             if (!lastPt) return { x: fallbackX, y: fallbackY };
@@ -306,6 +360,9 @@
 
         switch (kind) {
             case 'goal':
+                // Si la jugada viene por una banda, el balón entra por ese lado de la portería.
+                if (hasLane) return { x: goalX, y: laneY(lane, side, 0) < 50 ? 46.5 : 53.5 };
+                return { x: goalX, y: 50 + ((playIndex % 5) - 2) * 2.2 };
             case 'own-goal':
                 return { x: goalX, y: 50 + ((playIndex % 5) - 2) * 2.2 };
             case 'penalty':
@@ -315,28 +372,37 @@
             case 'goalkick':
                 return { x: ownGoalX + attack * 6, y: 50 };
             case 'save':
+                if (hasLane) return { x: goalX - attack * 3, y: laneY(lane, side, 0) < 50 ? 44 : 56 };
                 return { x: goalX - attack * 3, y: 50 + ((playIndex % 3) - 1) * 6 };
             case 'shot':
             case 'oneonone':
-                return { x: boxX, y: lastPt ? clamp(lastPt.y, 28, 72) : 50 };
+                return { x: boxX, y: laneShift(lastPt ? lastPt.y : 50, 0.55, 28, 72) };
             case 'box':
-                return { x: boxX, y: lastPt ? clamp(lastPt.y, 22, 78) : 50 };
+                return { x: boxX, y: laneShift(lastPt ? lastPt.y : 50, 0.45, 22, 78) };
             case 'wing':
+                if (hasLane) {
+                    var wp = nearPlayer(side === 'home' ? 70 : 30, wingY, true);
+                    return { x: wp.x, y: laneY(lane, side, 0.1) };
+                }
                 return nearPlayer(side === 'home' ? 70 : 30, wingY, true);
             case 'throwin':
                 return { x: lastPt ? clamp(lastPt.x, 12, 88) : (side === 'home' ? 62 : 38), y: wingY };
             case 'counter':
-                return { x: side === 'home' ? 78 : 22, y: lastPt ? clamp(lastPt.y, 18, 82) : 50 };
+                return { x: side === 'home' ? 78 : 22, y: laneShift(lastPt ? lastPt.y : 50, 0.3, 18, 82) };
             case 'clearance':
-                return { x: boxX, y: lastPt ? clamp(lastPt.y, 18, 82) : 50 };
+                return { x: boxX, y: laneShift(lastPt ? lastPt.y : 50, 0.4, 18, 82) };
             case 'foul':
-                return nearPlayer(side === 'home' ? 62 : 38, lastPt ? lastPt.y : 50, false);
+                return nearPlayer(side === 'home' ? 62 : 38, laneShift(lastPt ? lastPt.y : 50, 0.25, 8, 92), false);
             case 'yellow':
             case 'red':
             case 'injury':
             case 'sub':
                 return nearPlayer(50, 50, false);
             default:
+                if (hasLane || lane === 'C') {
+                    var bx = lastPt ? clamp(lastPt.x + attack * 3, 5, 95) : (side === 'home' ? 58 : 42);
+                    return { x: bx, y: laneShift(lastPt ? lastPt.y : 50, 0.15, 6, 94) };
+                }
                 if (lastPt) return { x: clamp(lastPt.x + attack * 3, 5, 95), y: lastPt.y };
                 return { x: side === 'home' ? 58 : 42, y: 50 };
         }
@@ -440,18 +506,59 @@
         });
     }
 
+    // Saques de centro: primera jugada del partido, de la segunda parte y de cada parte de la prórroga.
+    // Saca el equipo de esa primera jugada en la primera parte; en la segunda, el otro (reglamento).
+    function markKickoffs(plays, d) {
+        var firstHalfKicker = null, etKicker = null;
+        var seen46 = false, seen91 = false, seen106 = false;
+        var hasET = plays.some(function (p) { return minuteValue(p.minute) >= 96 && !/\+/.test(String(p.minute)); });
+        plays.forEach(function (p, i) {
+            var v = minuteValue(p.minute);
+            var side = sideOfTeam(p.team, d) || 'home';
+            if (i === 0) {
+                firstHalfKicker = side;
+                p.kickoffBefore = side;
+                p.kickoffLabel = 'Saque inicial';
+            } else if (!seen46 && v >= 46) {
+                p.kickoffBefore = firstHalfKicker === 'home' ? 'away' : 'home';
+                p.kickoffLabel = 'Saque de centro (segunda parte)';
+            } else if (hasET && !seen91 && v >= 91) {
+                etKicker = side;
+                p.kickoffBefore = side;
+                p.kickoffLabel = 'Saque de centro (prórroga)';
+            } else if (hasET && !seen106 && v >= 106) {
+                p.kickoffBefore = etKicker === 'home' ? 'away' : 'home';
+                p.kickoffLabel = 'Saque de centro (segunda parte de la prórroga)';
+            }
+            if (v >= 46) seen46 = true;
+            if (v >= 91) seen91 = true;
+            if (v >= 106) seen106 = true;
+        });
+    }
+
     function buildPlays(d) {
         if (!d) return [];
         var src = (d.plays || []).map(function (p) { return p.token + '|' + (p.lines || []).join('\n'); }).join('\0');
         src += '\0SO:' + ((d.narrationText || '').length);
         if (src === lastPlaysSource && parsedPlays.length) return parsedPlays;
         lastPlaysSource = src;
+        var prevLane = null, prevTeam = null;
         parsedPlays = (d.plays || []).map(function (p, i) {
             var first = (p.lines && p.lines[0]) || '';
             var team = d.detectTeam ? d.detectTeam(first) : null;
             var text = (p.lines || []).join(' \n ');
             var players = d.playersIn ? d.playersIn(text) : [];
             var kind = classify(text);
+            // «la otra banda» solo tiene sentido si sigue atacando el mismo equipo.
+            var hint = laneHint(text, team && team === prevTeam ? prevLane : null);
+            var lane = hint.lane;
+            if (lane === 'W') lane = null;
+            // En jugadas a balón parado la «frontal» o «por el centro» no es una banda
+            // (córner al área, penalti por el centro...). Solo cuentan izquierda/derecha.
+            if (lane === 'C' && /^(corner|penalty|goalkick|throwin|sub|yellow|red|injury)$/.test(kind)) { lane = null; hint = { lane: null, src: null }; }
+            if (kind === 'penalty' || kind === 'goalkick' || kind === 'sub') { lane = null; hint = { lane: null, src: null }; }
+            if (kind === 'goal' && /penalti|penalty/i.test(text)) { lane = null; hint = { lane: null, src: null }; }
+            if (hint.lane) { prevLane = lane || prevLane; prevTeam = team; }
             return {
                 i: i,
                 minute: p.token,
@@ -459,9 +566,12 @@
                 text: text,
                 players: players,
                 kind: kind,
-                target: inferTarget(kind, team, players, d, i, text)
+                lane: lane,
+                laneSrc: hint.src,
+                target: inferTarget(kind, team, players, d, i, text, lane)
             };
         });
+        markKickoffs(parsedPlays, d);
         var kicks = parseShootoutKicks(d);
         if (kicks.length) {
             parsedPlays.push({
@@ -1290,10 +1400,77 @@
         };
     }
 
-    function setupKickoff(players) {
+    // Formación de saque de centro: cada equipo en su campo, los rivales fuera del círculo central
+    // y dos jugadores del equipo que saca junto al balón (uno sobre él y otro a su lado).
+    var CIRCLE_RX = 9.15 / 105 * 100 + 1.6;   // radio del círculo en % de ancho (+ margen del disco)
+    var CIRCLE_RY = 9.15 / 68 * 100 + 2.4;    // y en % de alto
+    function setupKickoff(players, kicker) {
+        kicker = kicker || 'home';
         players.forEach(function (p) {
-            placeAt(p, p.baseX, p.baseY);
+            var own = p.side === 'home' ? p.baseX : 100 - p.baseX;   // 0 = su portería
+            var x = 7 + (own - 7) * 0.58;                             // FW 74 -> ~46, MF 45 -> ~29
+            if (p.pos === 'GK') x = 5.5;
+            var y = 50 + (p.baseY - 50) * 1.05;
+            placeAt(p, p.side === 'home' ? x : 100 - x, y);
+            // Nadie pisa el campo rival.
+            if (p.side === 'home') p.tx = Math.min(p.tx, 48.3);
+            else p.tx = Math.max(p.tx, 51.7);
         });
+        var team = ofSide(players, kicker).filter(function (p) { return p.pos !== 'GK'; });
+        var order = ['FW', 'AM', 'MF', 'DM', 'DF'];
+        team.sort(function (a, b) {
+            var oa = order.indexOf(a.pos), ob = order.indexOf(b.pos);
+            if (oa !== ob) return oa - ob;
+            return Math.abs(a.baseY - 50) - Math.abs(b.baseY - 50);
+        });
+        var dir = kicker === 'home' ? 1 : -1;
+        var taker = team[0], mate = team[1];
+        if (taker) placeAt(taker, 50 - dir * 1.4, 50);
+        if (mate) placeAt(mate, 50 - dir * 3.2, mate.baseY < 50 ? 41 : 59);
+        // Los demás, fuera del círculo central (el que no saca, obligatoriamente).
+        players.forEach(function (p) {
+            if (p === taker || p === mate || p.pos === 'GK') return;
+            var dx = (p.tx - 50) / CIRCLE_RX, dy = (p.ty - 50) / CIRCLE_RY;
+            var r = Math.sqrt(dx * dx + dy * dy);
+            if (r < 1.05) {
+                if (r < 0.05) { dx = -dir; dy = 0.4; r = Math.sqrt(dx * dx + dy * dy); }
+                p.tx = 50 + dx / r * CIRCLE_RX * 1.08;
+                p.ty = 50 + dy / r * CIRCLE_RY * 1.08;
+                if (p.side === 'home') p.tx = Math.min(p.tx, 48.3);
+                else p.tx = Math.max(p.tx, 51.7);
+            }
+        });
+        return { taker: taker, mate: mate };
+    }
+
+    // El árbitro, fuera del círculo y del lado del equipo que no saca (no tapa a los que sacan).
+    function kickoffRefSpot(kicker) {
+        return { x: kicker === 'away' ? 44 : 56, y: 70 };
+    }
+
+    function resetToBase(players) {
+        players.forEach(function (p) { p.tx = p.baseX; p.ty = p.baseY; });
+    }
+
+    // Fase previa de saque de centro (inicio de cada parte): formación, toque y pase atrás.
+    function kickoffLeadIn(players, kicker, highlight) {
+        var phases = [];
+        var info = setupKickoff(players, kicker);
+        phases.push({ players: snapshotTargets(players), ballPath: [{ x: 50, y: 50 }], ms: 650, highlight: [], pose: false, kickoff: true, ref: kickoffRefSpot(kicker) });
+        var dir = kicker === 'home' ? 1 : -1;
+        var recv = ofSide(players, kicker).filter(function (p) { return p.pos === 'MF' || p.pos === 'DM'; })
+            .sort(function (a, b) { return Math.abs(a.ty - 50) - Math.abs(b.ty - 50); })[0];
+        var path = [{ x: 50, y: 50 }];
+        if (info.mate) path.push({ x: info.mate.tx, y: info.mate.ty });
+        // Arrancan todos: medio camino entre la formación de saque y su sitio.
+        players.forEach(function (p) {
+            p.tx = lerp(p.tx, p.baseX, 0.45);
+            p.ty = lerp(p.ty, p.baseY, 0.45);
+        });
+        if (recv) { placeAt(recv, recv.tx - dir * 1.5, recv.ty); path.push({ x: recv.tx, y: recv.ty }); }
+        phases.push({ players: snapshotTargets(players), ballPath: path, ms: 700, highlight: [], pose: false, kickoff: true, ref: (function () { var r = kickoffRefSpot(kicker); return { x: r.x + (kicker === 'away' ? -3 : 3), y: r.y - 2 }; })() });
+        resetToBase(players);
+        return phases;
     }
 
     function snapshotTargets(players) {
@@ -1357,10 +1534,12 @@
             };
         });
         if (!play) {
-            setupKickoff(players);
-            var kickPhases = [{ players: snapshotTargets(players), ballPath: [{ x: 50, y: 50 }], ms: 500, highlight: [], ref: { x: 53, y: 62 } }];
+            var firstKicker = (parsedPlays[0] && parsedPlays[0].kickoffBefore) || 'home';
+            setupKickoff(players, firstKicker);
+            var kickPhases = [{ players: snapshotTargets(players), ballPath: [{ x: 50, y: 50 }], ms: 500, highlight: [], ref: kickoffRefSpot(firstKicker) }];
             return { phases: kickPhases };
         }
+        var leadIn = play.kickoffBefore ? kickoffLeadIn(players, play.kickoffBefore, play.players || []) : [];
         var attack = sideOfTeam(play.team, d) || 'home';
         var ballT = play.target || { x: 50, y: 50 };
         var text = play.text || '';
@@ -1505,7 +1684,7 @@
             phases.push({ players: snapshotTargets(players), ballPath: ogPath, ms: 700, highlight: highlight });
             setupCelebration(players, play, attack, ballT);
             phases.push({ players: snapshotTargets(players), ballPath: [ballT], ms: 1000, highlight: highlight, pose: true });
-            setupKickoff(players);
+            setupKickoff(players, ballT.x > 50 ? 'away' : 'home');
             phases.push({ players: snapshotTargets(players), ballPath: [{ x: 50, y: 50 }], ms: 900, highlight: [], pose: false });
         } else if (kind === 'shot' || kind === 'save' || kind === 'box' || kind === 'goal' || kind === 'oneonone') {
             var asOne = oneOnOne || kind === 'oneonone';
@@ -1551,7 +1730,7 @@
                     highlight: highlight,
                     pose: true
                 });
-                setupKickoff(players);
+                setupKickoff(players, ballT.x > 50 ? 'away' : 'home');
                 phases.push({
                     players: snapshotTargets(players),
                     ballPath: [{ x: 50, y: 50 }],
@@ -1570,6 +1749,7 @@
             phases.push({ players: snapshotTargets(players), ballPath: passPath, ms: 800, highlight: highlight });
         }
         attachReferee(phases, play, kind, ballT);
+        if (leadIn.length) phases = leadIn.concat(phases);
         return { phases: phases, highlight: highlight };
     }
 
@@ -1577,7 +1757,7 @@
         var bx = (ballPt && ballPt.x != null) ? ballPt.x : 50;
         var by = (ballPt && ballPt.y != null) ? ballPt.y : 50;
         var spot;
-        if (!kind || typ === 'kickoff') spot = { x: 53, y: 62 };
+        if (!kind || typ === 'kickoff') spot = { x: 56, y: 70 };
         else if (kind === 'shootout' || kind === 'shootout-kick') spot = { x: 83.5, y: 64 };
         else if (kind === 'corner') spot = { x: bx < 50 ? 18 : 82, y: by < 50 ? 28 : 72 };
         else if (kind === 'penalty') spot = { x: bx < 50 ? 18.5 : 81.5, y: 64 };
@@ -1725,6 +1905,8 @@
         anim.start = performance.now();
         anim.running = true;
         if (phase.highlight) highlightPlayers(phase.highlight);
+        // La etiqueta «Saque de centro» solo se ve mientras dura esa fase.
+        if (ui.caption) ui.caption.classList.toggle('kickoff-on', !!phase.kickoff);
         if (immediate) {
             finishPhase();
             return;
@@ -2017,14 +2199,18 @@
             var fallback = (d && d.started && d.narration && d.narration.trim())
                 ? escapeHtml(d.narration.trim())
                 : 'Saque inicial. Pulsa «Comenzar» o mueve el deslizador para ver una jugada.';
-            ui.caption.innerHTML = fallback;
+            ui.caption.innerHTML = '<span class="campo-kind kickoff">Saque inicial</span> ' + fallback;
             return;
         }
         var kind = play.kind || 'play';
         var label = KIND_LABEL[kind] || 'Jugada';
         var live = d && d.started && !dragging && d.narration && d.narration.trim();
         var text = live ? d.narration.trim() : summarize(play.text);
-        ui.caption.innerHTML = '<span class="campo-kind ' + kind + '">' + escapeHtml(label) + '</span> ' + escapeHtml(text);
+        var pre = '';
+        if (play.kickoffBefore && play.kickoffLabel) pre = '<span class="campo-kind kickoff lead" title="Antes de esta jugada">' + escapeHtml(play.kickoffLabel) + '</span> ';
+        var laneTxt = play.lane === 'L' ? 'por la izquierda' : play.lane === 'R' ? 'por la derecha' : play.lane === 'C' ? 'por el centro' : '';
+        var laneChip = laneTxt ? ' <span class="campo-lane" title="Zona deducida de la narración (vista del equipo que ataca)">' + laneTxt + '</span>' : '';
+        ui.caption.innerHTML = pre + '<span class="campo-kind ' + kind + '">' + escapeHtml(label) + '</span>' + laneChip + ' ' + escapeHtml(text);
         lastKind = kind;
     }
 
@@ -2354,7 +2540,8 @@
         updateChrome(d, play);
         setCaption(play, d);
         if (play && play.i !== lastPlayIndex) {
-            var jump = lastPlayIndex < 0 || Math.abs(play.i - lastPlayIndex) > 3;
+            // -2 = estábamos en el saque inicial: la primera jugada se anima (con su saque de centro).
+            var jump = lastPlayIndex === -1 || (lastPlayIndex >= 0 && Math.abs(play.i - lastPlayIndex) > 3) || (lastPlayIndex === -2 && play.i > 3);
             playResolved(play, d, jump);
             lastPlayIndex = play.i;
         } else if (!play && lastPlayIndex !== -2) {
@@ -2415,10 +2602,35 @@
         refresh: refresh,
         onShow: onShow,
         resetView: resetView,
+        // Solo para pruebas: deja el campo en la fase k de la jugada i (sin animación).
+        debugShowPhase: function (i, k) {
+            var d = data();
+            var plays = buildPlays(d);
+            var play = i == null ? null : plays[i];
+            dragging = true;   // congela el refresco automático mientras se inspecciona (solo pruebas)
+            renderPlayers(d, play);
+            setCaption(play, d);
+            var r = resolvePlay(play, d);
+            var ph = (r.phases || [])[k == null ? 0 : k];
+            if (anim.raf) cancelAnimationFrame(anim.raf);
+            anim.queue = [];
+            if (ph) startPhase(ph, true);
+            if (ph && ph.highlight) highlightPlayers(ph.highlight);
+            return !!ph;
+        },
+        debugLane: function (text, prev) { return laneHint(text, prev || null); },
+        debugPhases: function (i) {
+            var d = data();
+            var plays = buildPlays(d);
+            var r = resolvePlay(i == null ? null : plays[i], d);
+            return (r.phases || []).map(function (ph) {
+                return { ms: ph.ms, pose: ph.pose, kickoff: !!ph.kickoff, ball: ph.ballPath, players: ph.players, ref: ph.ref };
+            });
+        },
         debugPlays: function () {
             var d = data();
             return buildPlays(d).map(function (p) {
-                return { i: p.i, minute: p.minute, kind: p.kind, team: p.team, text: (p.text || '').slice(0, 220), players: p.players, target: p.target };
+                return { i: p.i, minute: p.minute, kind: p.kind, team: p.team, text: (p.text || '').slice(0, 220), players: p.players, target: p.target, lane: p.lane || null, laneSrc: p.laneSrc || null, kickoffBefore: p.kickoffBefore || null };
             });
         }
     };

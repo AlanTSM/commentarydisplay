@@ -183,6 +183,19 @@
 
 .campo-caption .campo-kind.throwin { background: #0369a1; }
 .campo-caption .campo-kind.oneonone { background: #c2410c; }
+.campo-caption .campo-kind.kickoff { background: #475569; }
+.campo-caption .campo-kind.kickoff.lead { display: none; }
+.campo-caption.kickoff-on .campo-kind.kickoff.lead { display: inline-block; }
+.campo-caption .campo-lane {
+    display: inline-block;
+    margin-right: 6px;
+    padding: 0 7px;
+    border-radius: 999px;
+    border: 1px solid #5b5b78;
+    color: #c9c9de;
+    font-size: 11px;
+    vertical-align: middle;
+}
 
 .campo-fs-btn {
     min-width: 0 !important;
