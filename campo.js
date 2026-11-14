@@ -53,6 +53,9 @@
     var sliderPausedByUs = false;
     var playerState = {};
     var refState = { x: 53, y: 62, el: null, name: '' };
+    // Escala de círculos, textos y balón en pantallas estrechas (el SVG se encoge con el ancho).
+    var nodeScale = 1;
+    var PITCH_GREEN = '#1a7a3c';
     var anim = {
         running: false,
         start: 0,
@@ -120,23 +123,59 @@
         return last.length > max ? last.slice(0, max - 1) + '.' : last;
     }
 
-    function isCompactView() {
+    function pitchBoxWidth() {
+        // Ancho real del dibujo (en modo ampliado el SVG puede ser más estrecho que su caja).
         var box = $('campo-pitch-box');
-        if (!box) return false;
-        return box.getBoundingClientRect().width < 640;
+        if (!box) return 0;
+        var el = box.querySelector('svg') || box;
+        return el.getBoundingClientRect().width || box.getBoundingClientRect().width;
+    }
+
+    function isCompactView() {
+        var w = pitchBoxWidth();
+        return w > 0 && w < 640;
+    }
+
+    // Factor de escala de los nodos: 1 en escritorio; hasta 1,75 en un móvil de 360 px.
+    // Así el dorsal y el nombre siguen siendo legibles aunque el SVG se reduzca a un 30 %.
+    function computeNodeScale() {
+        var w = pitchBoxWidth();
+        if (!w || w >= 900) return 1;
+        return clamp(1 + (900 - w) / 900 * 1.3, 1, 1.75);
+    }
+
+    function sepFactor() {
+        return 1 + (nodeScale - 1) * 0.5;
     }
 
     function applyCompactNames() {
         if (!root) return;
         var compact = isCompactView();
         var wrap = root.querySelector('.campo-wrap');
-        if (wrap) wrap.classList.toggle('campo-compact', compact);
+        if (wrap) {
+            wrap.classList.toggle('campo-compact', compact);
+            wrap.classList.toggle('campo-narrow', pitchBoxWidth() > 0 && pitchBoxWidth() < 420);
+        }
+        var k = computeNodeScale();
+        var changed = Math.abs(k - nodeScale) > 0.01;
+        nodeScale = k;
         if (!playersLayer) return;
         Array.prototype.forEach.call(playersLayer.querySelectorAll('.campo-name'), function (t) {
             var full = t.getAttribute('data-full');
             var short = t.getAttribute('data-short');
             if (full && short) t.textContent = compact ? short : full;
+            t.setAttribute('font-size', compact ? '13.5' : '11');
+            t.setAttribute('y', compact ? (t.getAttribute('data-ref') ? '33' : '35') : (t.getAttribute('data-ref') ? '31' : '33'));
         });
+        Array.prototype.forEach.call(playersLayer.querySelectorAll('.campo-player .campo-dorsal'), function (t) {
+            t.setAttribute('font-size', compact ? '15' : '13');
+            t.setAttribute('y', compact ? '5.5' : '5');
+        });
+        if (changed) {
+            Object.keys(playerState).forEach(function (key) { placePlayerEl(playerState[key]); });
+            placeRefEl();
+            placeBall();
+        }
     }
 
     function assignNumber(side, name) {
@@ -686,8 +725,9 @@
 
     function separate(players, opts) {
         opts = opts || {};
-        var minX = opts.minX || 6.2;
-        var minY = opts.minY || 11.2;
+        var sf = sepFactor();
+        var minX = (opts.minX || 6.2) * sf;
+        var minY = (opts.minY || 11.2) * sf;
         var rounds = opts.rounds || 4;
         var pinned = opts.pinned || {};
         var i, j, a, b, dx, dy, nx, ny, dist, push, k, pinA, pinB;
@@ -1602,13 +1642,14 @@
     function placeBall() {
         if (!ballEl) return;
         var p = toSvg(ball.x, ball.y);
-        ballEl.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')');
+        var bk = 1 + (nodeScale - 1) * 0.8;
+        ballEl.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')' + (bk !== 1 ? ' scale(' + bk.toFixed(3) + ')' : ''));
     }
 
     function placeRefEl() {
         if (!refState || !refState.el) return;
         var p = toSvg(refState.x, refState.y);
-        refState.el.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')');
+        refState.el.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')' + (nodeScale !== 1 ? ' scale(' + nodeScale.toFixed(3) + ')' : ''));
     }
 
     function buildRefNode(name) {
@@ -1631,6 +1672,7 @@
             'pointer-events': 'none', 'class': 'campo-name'
         });
         tName.setAttribute('data-full', short);
+        tName.setAttribute('data-ref', '1');
         tName.setAttribute('data-short', shortName(name, null, true) || short);
         tName.textContent = isCompactView() ? (tName.getAttribute('data-short') || short) : short;
         g.appendChild(tName);
@@ -1652,7 +1694,7 @@
     function placePlayerEl(st) {
         if (!st || !st.el) return;
         var p = toSvg(st.x, st.y);
-        st.el.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')');
+        st.el.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')' + (nodeScale !== 1 ? ' scale(' + nodeScale.toFixed(3) + ')' : ''));
     }
 
     function applyPlayerTargets(targets, t) {
@@ -1773,7 +1815,8 @@
             '<div class="campo-controls">' +
                 '<button type="button" id="campo-play">Comenzar</button>' +
                 '<span class="campo-min" id="campo-min">Minuto 0</span>' +
-                '<input type="range" class="campo-slider" id="campo-slider" min="0" max="90" value="0" step="1">' +
+                '<button type="button" id="campo-fs" class="campo-fs-btn" title="Ver el campo a pantalla completa (en el móvil, gíralo en horizontal)">Ampliar</button>' +
+                '<input type="range" class="campo-slider" id="campo-slider" min="0" max="90" value="0" step="1" aria-label="Jugada">' +
             '</div>' +
             '<p class="campo-note">Los movimientos son aproximados: el informe no trae coordenadas. Los jugadores se desplazan en bloque hacia la jugada y el balón sigue a quienes nombra la narración.</p>';
         root.appendChild(wrap);
@@ -1789,7 +1832,15 @@
         ui.homeSwatch = $('campo-home-swatch');
         ui.awaySwatch = $('campo-away-swatch');
 
+        ui.fs = $('campo-fs');
         ui.play.addEventListener('click', onPlayClick);
+        ui.fs.addEventListener('click', toggleExpanded);
+        document.addEventListener('fullscreenchange', function () {
+            if (!document.fullscreenElement && wrap.classList.contains('campo-expanded')) setExpanded(false, true);
+        });
+        document.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape' && wrap.classList.contains('campo-expanded')) setExpanded(false);
+        });
         ui.slider.addEventListener('input', onSliderInput);
         ui.slider.addEventListener('change', onSliderChange);
         if (!window.__campoResizeBound) {
@@ -1799,6 +1850,37 @@
         applyCompactNames();
         built = true;
         return true;
+    }
+
+    // Modo ampliado: el campo ocupa toda la pantalla (con la API de pantalla completa si existe;
+    // si no, con una capa fija). En los móviles intenta girar a horizontal.
+    function setExpanded(on, fromEvent) {
+        var wrap = root && root.querySelector('.campo-wrap');
+        if (!wrap) return;
+        wrap.classList.toggle('campo-expanded', on);
+        document.documentElement.classList.toggle('campo-noscroll', on);
+        if (ui.fs) ui.fs.textContent = on ? 'Cerrar' : 'Ampliar';
+        if (!fromEvent) {
+            try {
+                if (on && wrap.requestFullscreen && !document.fullscreenElement) {
+                    var pr = wrap.requestFullscreen();
+                    if (pr && pr.then) {
+                        pr.then(function () {
+                            if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {});
+                        }).catch(function () {});
+                    }
+                } else if (!on && document.fullscreenElement && document.exitFullscreen) {
+                    document.exitFullscreen().catch(function () {});
+                }
+            } catch (e) { /* capa fija como respaldo */ }
+        }
+        setTimeout(applyCompactNames, 60);
+        setTimeout(applyCompactNames, 400);
+    }
+
+    function toggleExpanded() {
+        var wrap = root && root.querySelector('.campo-wrap');
+        setExpanded(!(wrap && wrap.classList.contains('campo-expanded')));
     }
 
     function onPlayClick() {
@@ -2029,26 +2111,82 @@
         return Math.hypot(A.r - B.r, A.g - B.g, A.b - B.b);
     }
 
-    function gkKit(side, teamColors) {
-        var options = side === 'home'
-            ? [{ primary: '#f59e0b', secondary: '#1a1a1a' }, { primary: '#22c55e', secondary: '#052e16' }, { primary: '#e11d48', secondary: '#fff' }]
-            : [{ primary: '#22d3ee', secondary: '#083344' }, { primary: '#a855f7', secondary: '#fff' }, { primary: '#f97316', secondary: '#1a1a1a' }];
-        var team = (teamColors && teamColors.primary) || '#333';
-        var i, best = options[0], bestD = -1, dlt;
+    // Luminancia relativa y contraste WCAG para decidir borde, contorno y color del dorsal.
+    function relLum(hex) {
+        var c = hexRgb(hex);
+        if (!c) return 0.2;
+        function ch(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+        return 0.2126 * ch(c.r) + 0.7152 * ch(c.g) + 0.0722 * ch(c.b);
+    }
+
+    function contrastRatio(a, b) {
+        var la = relLum(a), lb = relLum(b);
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    }
+
+    // Estilo legible de un círculo de jugador a partir de los colores del club:
+    // - borde: el color secundario, salvo que casi no se distinga del primario;
+    // - contorno exterior fino: oscuro en equipaciones claras (blanco, amarillo, celeste),
+    //   claro en las oscuras que se confunden con el césped (negro, verde, granate);
+    // - dorsal: blanco o casi negro, el que más contraste tenga, con un halo suave.
+    function kitStyle(colors) {
+        var fill = (colors && colors.primary) || '#333333';
+        var ring = (colors && colors.secondary) || '#ffffff';
+        if (!hexRgb(fill)) fill = '#333333';
+        if (!hexRgb(ring)) ring = '#ffffff';
+        if (contrastRatio(fill, ring) < 1.35) {
+            ring = contrastRatio(fill, '#111111') > contrastRatio(fill, '#ffffff') ? '#111111' : '#ffffff';
+        }
+        var light = relLum(fill) > 0.42 || relLum(ring) > 0.6;
+        var outline = null;
+        if (light) outline = 'rgba(0,0,0,0.78)';
+        else if (contrastRatio(fill, PITCH_GREEN) < 2.2 && contrastRatio(ring, PITCH_GREEN) < 2.2) outline = 'rgba(255,255,255,0.9)';
+        var ink = contrastRatio(fill, '#ffffff') >= contrastRatio(fill, '#111111') ? '#ffffff' : '#111111';
+        var halo = ink === '#ffffff' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)';
+        return { fill: fill, ring: ring, outline: outline, ink: ink, halo: halo };
+    }
+
+    // Camiseta del portero: distinta de la de su equipo, de la del rival y de la del otro portero.
+    // Se elige el color cuyo parecido más cercano (a cualquiera de esos colores) sea el menor.
+    var GK_OPTIONS = {
+        home: [{ primary: '#f59e0b', secondary: '#1a1a1a' }, { primary: '#22c55e', secondary: '#052e16' }, { primary: '#e11d48', secondary: '#ffffff' }, { primary: '#a855f7', secondary: '#ffffff' }, { primary: '#9ca3af', secondary: '#111111' }],
+        away: [{ primary: '#22d3ee', secondary: '#083344' }, { primary: '#a855f7', secondary: '#ffffff' }, { primary: '#f97316', secondary: '#1a1a1a' }, { primary: '#84cc16', secondary: '#1a2e05' }, { primary: '#9ca3af', secondary: '#111111' }]
+    };
+
+    function pickGk(options, avoid) {
+        var i, j, best = options[0], bestD = -1, dmin;
         for (i = 0; i < options.length; i++) {
-            dlt = colorDist(options[i].primary, team);
-            if (dlt > bestD) { bestD = dlt; best = options[i]; }
+            dmin = 999;
+            for (j = 0; j < avoid.length; j++) {
+                if (avoid[j]) dmin = Math.min(dmin, colorDist(options[i].primary, avoid[j]) * (j === 0 ? 1 : 1.15));
+            }
+            dmin = Math.min(dmin, colorDist(options[i].primary, PITCH_GREEN) * 1.6);
+            // Pequeña preferencia por el orden de la lista (colores habituales primero).
+            dmin -= i * 6;
+            if (dmin > bestD) { bestD = dmin; best = options[i]; }
         }
         return best;
+    }
+
+    function gkKit(side, teamColors, d) {
+        var own = teamColors || {};
+        var rival = d ? (side === 'home' ? d.awayColors : d.homeColors) || {} : {};
+        var avoid = [own.primary, rival.primary, own.secondary, rival.secondary];
+        if (side === 'away' && d) {
+            var homeGk = pickGk(GK_OPTIONS.home, [rival.primary, own.primary, rival.secondary, own.secondary]);
+            avoid.push(homeGk.primary);
+        }
+        return pickGk(GK_OPTIONS[side] || GK_OPTIONS.home, avoid);
     }
 
     function buildPlayerNode(p, d, st) {
         var teamColors = p.side === 'home' ? d.homeColors : d.awayColors;
         var isGk = p.pos === 'GK';
-        var colors = isGk ? gkKit(p.side, teamColors) : teamColors;
-        var primary = (colors && colors.primary) || '#333';
-        var secondary = (colors && colors.secondary) || '#fff';
-        var ink = contrastColor(primary);
+        var colors = isGk ? gkKit(p.side, teamColors, d) : teamColors;
+        var kit = kitStyle(colors);
+        var primary = kit.fill;
+        var secondary = kit.ring;
+        var ink = kit.ink;
         var num = assignNumber(p.side, p.name);
         var pos = toSvg(st.x, st.y);
         var g = svgEl('g', {
@@ -2060,6 +2198,12 @@
             filter: 'url(#campo-shadow)'
         });
         if (isGk) g.classList.add('campo-gk');
+        if (kit.outline) {
+            g.appendChild(svgEl('circle', {
+                r: 22.6, fill: 'none', stroke: kit.outline, 'stroke-width': 1.6,
+                'class': 'campo-outline', 'pointer-events': 'none'
+            }));
+        }
         g.appendChild(svgEl('circle', {
             r: 20,
             fill: primary,
@@ -2085,6 +2229,9 @@
             x: 0, y: 5,
             'text-anchor': 'middle',
             fill: ink,
+            stroke: kit.halo,
+            'stroke-width': 1.6,
+            'paint-order': 'stroke',
             'font-size': '13',
             'font-weight': '700',
             'font-family': 'Segoe UI, sans-serif',
@@ -2125,9 +2272,13 @@
         Array.prototype.forEach.call(playersLayer.querySelectorAll('.campo-player'), function (g) {
             var active = !!set[g.getAttribute('data-name')];
             g.classList.toggle('is-active', active && names && names.length);
-            g.style.opacity = (!names || !names.length || active) ? '1' : '0.58';
-            var c = g.querySelector('circle');
-            if (c) c.setAttribute('r', active && names && names.length ? 23 : 20);
+            // Atenuar sin desteñir: con 0,58 las camisetas blancas se veían verdosas.
+            g.style.opacity = (!names || !names.length || active) ? '1' : '0.8';
+            var on = active && names && names.length;
+            var c = g.querySelector('.campo-disk');
+            if (c) c.setAttribute('r', on ? 23 : 20);
+            var o = g.querySelector('.campo-outline');
+            if (o) o.setAttribute('r', on ? 25.6 : 22.6);
         });
     }
 
