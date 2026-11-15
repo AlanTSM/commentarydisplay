@@ -3346,7 +3346,10 @@
         var ts = r.taker ? playerState[r.taker] : null;
         if (r.stage === 0) {
             var dBall = mDist(ball.x, ball.y, r.spot.x, r.spot.y);
-            if (ball.state !== 'flight' && dBall > 1.0 && r.t > (r.auto ? 0.6 : 0.05)) {
+            // El balón que ha salido se queda fuera un instante antes de volver (nunca «rebota» en la línea).
+            var outNow = ball.x < -0.2 || ball.x > 100.2 || ball.y < -0.2 || ball.y > 100.2;
+            if (ball.state !== 'flight') r.rest = (r.rest || 0) + dt; else r.rest = 0;
+            if (ball.state !== 'flight' && dBall > 1.0 && r.t > (r.auto ? 0.6 : 0.05) && (!outNow || r.rest > 0.7)) {
                 if (ball.state === 'held') { ball.state = 'free'; ball.owner = null; }
                 launchBall({ x: r.spot.x, y: r.spot.y }, 'reset', null);
                 ball.fl.keep = true;
