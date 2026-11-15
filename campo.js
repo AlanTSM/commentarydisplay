@@ -1962,12 +1962,25 @@
         return arr;
     }
 
-    function setMoverTarget(st, tx, ty, durSec) {
-        st.tx = tx; st.ty = ty; st.hx = tx; st.hy = ty;
+    function setMoverTarget(st, tx, ty, durSec, opts) {
+        opts = opts || {};
         var d = mDist(st.x, st.y, tx, ty);
-        // Velocidad para llegar en ~75 % de la fase: andando, trotando o esprintando según haga falta.
-        st.spd = clamp(d / Math.max(0.4, durSec * 0.6), SPD_MIN, SPD_MAX);
+        // Tiempo de reacción: los que intervienen arrancan ya; el resto, un poco después y escalonados.
+        var react = opts.involved ? 0 : (opts.react != null ? opts.react : 0.05 + Math.random() * 0.25);
+        var avail = Math.max(0.4, durSec * 0.6 - react);
+        // Velocidad para llegar a tiempo: andando, trotando o esprintando según haga falta.
+        var spd = clamp(d / avail, SPD_MIN, SPD_MAX);
+        if (opts.jog) spd = Math.min(spd, Math.max(SPD_MIN, Math.min(4.6, d / Math.max(0.4, durSec * 0.9))));
+        st.pend = { tx: tx, ty: ty, spd: spd, at: performance.now() + react * 1000 / tempo() };
+        st.hx = tx; st.hy = ty;
         st.idleAt = performance.now() + 900 + Math.random() * 1600;
+        if (react <= 0) applyPending(st, performance.now());
+    }
+
+    function applyPending(st, now) {
+        if (!st.pend || now < st.pend.at) return;
+        st.tx = st.pend.tx; st.ty = st.pend.ty; st.spd = st.pend.spd;
+        st.pend = null;
     }
 
     function stepMover(st, dt, tp) {
@@ -2140,7 +2153,10 @@
             var fx, fy;
             if (sp > 0.4) { fx = o.vx / sp; fy = o.vy / sp; }
             else { fx = o.side === 'home' ? 1 : -1; fy = 0; }
-            var tx = o.x + fx * 0.9 / M_X, ty = o.y + fy * 0.9 / M_Y + 0.9 / M_Y * 0.0;
+            // Conducción: toques cortos. Con el jugador en carrera el balón se adelanta y vuelve al pie.
+            o.touch = (o.touch || 0) + dt * (sp > 2 ? 1.6 + sp * 0.18 : 0);
+            var reach = sp > 2 ? 0.7 + 0.9 * Math.abs(Math.sin(o.touch * Math.PI)) : 0.75;
+            var tx = o.x + fx * reach / M_X, ty = o.y + fy * reach / M_Y;
             var k = Math.min(1, dt * 14);
             ball.x += (tx - ball.x) * k;
             ball.y += (ty - ball.y) * k;
@@ -2161,10 +2177,20 @@
         var dur = Math.max(0.35, (ph.ms || 700) / 1000 * motor.scale);
         motor.phaseDur = dur;
         var targets = ph.players || {};
+        var involved = {};
+        (ph.highlight || []).forEach(function (n) { involved[n] = true; });
+        (ph.ballPath || []).forEach(function (pt) {
+            var k = nearestPlayerTo(pt.x, pt.y, 2.8, true);
+            if (k) involved[k] = true;
+        });
+        if (ball.owner) involved[ball.owner] = true;
         Object.keys(playerState).forEach(function (k) {
             var st = playerState[k];
             var t = targets[k];
-            if (t) setMoverTarget(st, t.x, t.y, dur);
+            if (!t) return;
+            var inv = involved[k] || involved[st.name];
+            // Vuelta a la posición (tras gol, falta, saque...): se vuelve trotando, sin prisas.
+            setMoverTarget(st, t.x, t.y, dur, { involved: inv, jog: ph.pose === false && !ph.kickoff });
         });
         if (ph.ref) {
             refState.tx = ph.ref.x; refState.ty = ph.ref.y; refState.hx = ph.ref.x; refState.hy = ph.ref.y;
@@ -2183,7 +2209,7 @@
             var st = playerState[k];
             var t = targets[k];
             if (!t) return;
-            st.x = t.x; st.y = t.y; st.tx = t.x; st.ty = t.y; st.hx = t.x; st.hy = t.y; st.vx = 0; st.vy = 0;
+            st.x = t.x; st.y = t.y; st.tx = t.x; st.ty = t.y; st.hx = t.x; st.hy = t.y; st.vx = 0; st.vy = 0; st.pend = null;
             st.idleAt = performance.now() + 600 + Math.random() * 1500;
             placePlayerEl(st);
         });
@@ -2233,6 +2259,7 @@
         Object.keys(playerState).forEach(function (k) {
             var st = playerState[k];
             if (st.x == null) return;
+            if (st.pend) applyPending(st, now);
             var d = stepMover(st, dt, tp);
             if (allowIdle && !(motor.phase && motor.phase.pose)) idleWander(st, now, d);
             placePlayerEl(st);
