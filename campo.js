@@ -2535,13 +2535,16 @@
     function drawBenches(d) {
         if (!benchLayer || !d) return;
         var data = ['home', 'away'].map(function (side) { return { side: side, names: benchNames(side, d) }; });
-        var sig = JSON.stringify(data) + nodeScale.toFixed(2) + (teamColorsOf('home', d).primary) + (teamColorsOf('away', d).primary);
+        var sig = JSON.stringify(data) + nodeScale.toFixed(2) + (pitchBoxWidth() < 520 ? 'n' : 'w') + (teamColorsOf('home', d).primary) + (teamColorsOf('away', d).primary);
         if (sig === benchSig) return;
         benchSig = sig;
         benchLayer.innerHTML = '';
-        var k = 1 + (nodeScale - 1) * 0.6;
+        // En pantallas estrechas el banquillo se dibuja bastante más grande (en móvil apenas se veía).
+        var narrowB = pitchBoxWidth() > 0 && pitchBoxWidth() < 520;
+        var k = narrowB ? Math.max(2.1, nodeScale * 1.1) : 1 + (nodeScale - 1) * 0.6;
         data.forEach(function (b) {
             var c = toSvg(BENCH[b.side].x, BENCH[b.side].y);
+            if (narrowB) { c.y = Math.min(c.y, 752 - 13 * k); }
             var n = Math.max(5, b.names.length);
             var step = 21 * k;
             var w = n * step + 12;
@@ -3450,7 +3453,8 @@
                 var h = lh.hist[i];
                 var p = play.minute === 'tanda' || play.kind === 'shootout' || play.kind === 'shootout-kick' ? period : periodOf(play);
                 var seg = { i: i, s0: ns, kind: play.kind, period: p, cut: false };
-                if ((p % 2 === 0) !== simFlipped) { simMirror(); simFlipped = !simFlipped; seg.flip = true; }
+                // Cambio de campo: cada uno aparece ya en su mitad (la reproducción lo funde a negro y vuelve).
+                if ((p % 2 === 0) !== simFlipped) { simFlipped = !simFlipped; seg.flip = true; seg.jumpFlip = true; }
                 period = p;
                 seg.flipped = simFlipped;
                 // Altas que no han entrado por un cambio narrado (por si acaso): aparecen desde el banquillo.
@@ -3725,6 +3729,24 @@
         if (adv) pb.s += dt * rate / SAMPLE_DT;
         var heldT = 0;
         if (pb.s > lim) { heldT = (pb.s - lim) * SAMPLE_DT; pb.s = lim; }
+        // Fundido en el cambio de campo: se oscurece, cada uno aparece en su mitad y vuelve la imagen.
+        var swapNow = false;
+        if (!pb.fadeSt && !pb.snap && pb.lastS >= 0) {
+            for (var fq = 0; fq < tl.segs.length; fq++) {
+                var fsg = tl.segs[fq];
+                if (fsg.jumpFlip && pb.lastS < fsg.s0 && pb.s >= fsg.s0) { pb.fadeSt = { t: 0, s0: fsg.s0 }; break; }
+            }
+        }
+        if (pb.fadeSt) {
+            var FD = 0.4;
+            pb.fadeSt.t += dt;
+            if (pb.fadeSt.t < FD) pb.s = Math.min(pb.s, pb.fadeSt.s0 - 0.02);
+            else if (!pb.fadeSt.swapped) { pb.fadeSt.swapped = true; swapNow = true; pb.s = Math.max(pb.s, pb.fadeSt.s0); }
+            var op = pb.fadeSt.t < FD ? 1 - pb.fadeSt.t / FD : Math.min(1, (pb.fadeSt.t - FD) / FD);
+            playersLayer.style.opacity = op < 1 ? op.toFixed(2) : '';
+            if (ballEl) ballEl.style.opacity = op < 1 ? op.toFixed(2) : '';
+            if (pb.fadeSt.t >= FD * 2) { pb.fadeSt = null; playersLayer.style.opacity = ''; if (ballEl) ballEl.style.opacity = ''; }
+        } else if (pb.snap && playersLayer.style.opacity) { playersLayer.style.opacity = ''; if (ballEl) ballEl.style.opacity = ''; }
         var s = pb.s;
         if (pb.flipBanner && s >= pb.flipBanner.s0) { showBanner(pb.flipBanner.period === 3 ? 'Prórroga · cambio de campo' : 'Cambio de campo'); pb.flipBanner = null; }
         // Efectos según el tramo que se está viendo (puede ir por detrás del de la narración).
@@ -3732,6 +3754,12 @@
         if (s < seg.s0) { for (var q = seg.k - 1; q >= 0; q--) { if (tl.segs[q].s0 <= s) { vseg = tl.segs[q]; break; } } }
         pb.held = heldT > 0 ? pb.held + dt : 0;
         var N = tl.N, lo = 0, hi = tl.S - 1;
+        // No se interpola a través de un cambio de campo (allí las posiciones cambian de mitad).
+        for (var bq = 0; bq < tl.segs.length; bq++) {
+            var bsg = tl.segs[bq];
+            if (!bsg.jumpFlip) continue;
+            if (pb.s < bsg.s0) hi = Math.min(hi, bsg.s0 - 1); else lo = Math.max(lo, bsg.s0);
+        }
         var k = Math.floor(s);
         var decay = Math.exp(-dt / (pb.fadeOff || 0.16));
         // Efectos: gol (red y aviso), cabizbajos.
@@ -3748,7 +3776,7 @@
         var t = performance.now() / 1000;
         for (var i = 0; i < N; i++) {
             var node = tlNodes[i];
-            var vis = tl.V[k * N + i] === 1;
+            var vis = tl.V[k * N + i] === 1 && !swapNow;
             if (vis && pb.hidden && pb.hidden[i]) { var fH = tl.F[k * N + i]; if (fH === 3 || fH === 4) vis = false; else delete pb.hidden[i]; }
             if (vis !== node.shown) { node.el.style.display = vis ? '' : 'none'; node.shown = vis; if (!vis) { pb.off[i * 2] = 0; pb.off[i * 2 + 1] = 0; } }
             if (!vis) continue;
@@ -3780,7 +3808,7 @@
             }
         }
         // Balón: interpolación lineal (los botes y los remates no se suavizan de más).
-        var k2 = Math.min(k + 1, hi), u = s - k;
+        var k2 = Math.min(k + 1, hi), u = k2 > k ? s - k : 0;
         var bx = lerp(tl.BX[k], tl.BX[k2], u), by = lerp(tl.BY[k], tl.BY[k2], u), bh = lerp(tl.BH[k], tl.BH[k2], u);
         var own = tl.BO[k];
         if (own >= 0 && tl.BS[k] === 0 && tl.V[k * N + own]) {
@@ -3792,6 +3820,7 @@
         pb.dispB[0] = bx; pb.dispB[1] = by;
         ball.x = bx; ball.y = by; ball.h = bh;
         placeBallVis(bx, by, bh);
+        if (ballEl) { var bd = swapNow ? 'none' : ''; if (ballEl.style.display !== bd) ballEl.style.display = bd; }
         stepManagers(dt, performance.now());
     }
 
