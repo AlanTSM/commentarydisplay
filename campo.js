@@ -3242,7 +3242,7 @@
 
     /* ---------------- Sesiones 15-17: reanudaciones (banda, puerta, córner, centro), faltas con y sin
        barrera, fueras de juego, linieres y protestas. Todo ocurre dentro de la simulación del coreógrafo. ---- */
-    var simDbg = [], simSegT = 99;
+    var simDbg = [], simSegT = 99, tlData = null;
     var simRestart = null, simEvents = [], simNs = 0, simAR = [], simGoalPlay = false, simAttackSide = 'home', simExiting = false;
     var RESTART_PREP = { throw: 1.3, goalkick: 1.9, corner: 2.1, free: 1.5, wall: 2.8, offside: 1.8 };
     var EVENT_LABEL = { throw: 'Saque de banda', goalkick: 'Saque de puerta', corner: 'Córner', free: 'Falta', wall: 'Falta · barrera',
@@ -3456,6 +3456,7 @@
         if (offsideCall) {
             // El asistente levanta la bandera y saca el equipo que defendía, desde donde estaba el adelantado.
             var spotO = { x: clamp(fp.x, 3, 97), y: clamp(fp.y, 4, 96) };
+            first.ms = Math.min(first.ms || 700, 900);
             return [first, { players: clonePlayers(first.players), ballPath: [{ x: spotO.x, y: spotO.y }], ms: 2600, highlight: first.highlight, ref: first.ref,
                 setPiece: { type: 'free', side: opp, spot: spotO, offside: true } }];
         }
@@ -3790,7 +3791,7 @@
                 simGoalPlay = play.kind === 'goal' || play.kind === 'own-goal';
                 simAttackSide = plan.info.attack;
                 // Una reanudación pendiente sigue su curso en la jugada siguiente (la jugada espera); en los goles se ejecuta ya.
-                if (simRestart && simGoalPlay) restartKick(simRestart);
+                if (simRestart && (simGoalPlay || plan.phases.some(function (q) { return q.setPiece; }))) restartKick(simRestart);
                 seg.attack = plan.info.attack; seg.outcome = plan.info.outcome; seg.fixed = plan.info.fixed;
                 var isSub = h.events.some(function (e) { return e.type === 'sub'; });
                 var ctx = { attack: plan.info.attack, frozen: false, search: true };
@@ -3992,10 +3993,10 @@
     function buildARNode() {
         var g = svgEl('g', { 'class': 'campo-ar', filter: 'url(#campo-shadow)' });
         var flag = svgEl('g', { 'class': 'campo-ar-flag' });
-        flag.appendChild(svgEl('line', { x1: 9, y1: 4, x2: 9, y2: -14, stroke: '#ddd', 'stroke-width': 2 }));
-        flag.appendChild(svgEl('rect', { x: 9, y: -14, width: 11, height: 8, fill: '#facc15', stroke: '#b91c1c', 'stroke-width': 1.5 }));
+        flag.appendChild(svgEl('line', { x1: 11, y1: 4, x2: 11, y2: -16, stroke: '#ddd', 'stroke-width': 2.2 }));
+        flag.appendChild(svgEl('rect', { x: 11, y: -16, width: 13, height: 9, fill: '#facc15', stroke: '#b91c1c', 'stroke-width': 1.6 }));
         g.appendChild(flag);
-        g.appendChild(svgEl('circle', { r: 11, fill: '#111111', stroke: '#f3f3f3', 'stroke-width': 2, 'class': 'campo-disk' }));
+        g.appendChild(svgEl('circle', { r: 14, fill: '#111111', stroke: '#f3f3f3', 'stroke-width': 2, 'class': 'campo-disk' }));
         var t = svgEl('text', { y: 3.5, 'text-anchor': 'middle', 'font-size': 8.5, 'font-weight': 800, fill: '#fff', 'font-family': 'Segoe UI, sans-serif' });
         t.textContent = 'AA';
         g.appendChild(t);
@@ -4893,7 +4894,7 @@
         if (tl && tl.matchId === matchId) return true;
         if (tlFailed === matchId) return false;
         try {
-            tl = buildTimeline(d);
+            tl = buildTimeline(d); tlData = d;
             tl.matchId = matchId;
             ensureMotor();
             tlBuildNodes(d);
@@ -5098,6 +5099,7 @@
             tlFrame(0);
             return { seg: sg.i, kind: sg.kind };
         },
+        debugBuild: function () { var t0 = performance.now(); buildTimeline(tlData); return Math.round(performance.now() - t0); },
         debugBall: function (a, b) {
             var out = []; for (var q = a; q < Math.min(b, tl.S); q++) out.push(q + ':' + tl.BX[q].toFixed(1) + ',' + tl.BY[q].toFixed(1) + ',' + tl.BH[q].toFixed(1) + ',' + tl.BS[q] + ',' + tl.BO[q] + ',' + simDbg[q]);
             return out.join(' ');
