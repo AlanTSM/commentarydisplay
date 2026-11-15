@@ -3240,6 +3240,7 @@
 
     /* ---------------- Sesiones 15-17: reanudaciones (banda, puerta, córner, centro), faltas con y sin
        barrera, fueras de juego, linieres y protestas. Todo ocurre dentro de la simulación del coreógrafo. ---- */
+    var simDbg = [];
     var simRestart = null, simEvents = [], simNs = 0, simAR = [], simGoalPlay = false, simAttackSide = 'home', simExiting = false;
     var RESTART_PREP = { throw: 1.3, goalkick: 1.9, corner: 2.1, free: 1.5, wall: 2.8, offside: 1.8 };
     var EVENT_LABEL = { throw: 'Saque de banda', goalkick: 'Saque de puerta', corner: 'Córner', free: 'Falta', wall: 'Falta · barrera',
@@ -3297,7 +3298,7 @@
             var wx = r.spot.x + gdx / gl * 9.15 / M_X, wy = r.spot.y + gdy / gl * 9.15 / M_Y;
             var px = -gdy / gl, py = gdx / gl;
             var defs = sideKeys(opp, true).sort(byDistTo(wx, wy)).slice(0, 4);
-            defs.forEach(function (k, i) { var o = (i - 1.5) * 0.85; setMoverTarget(playerState[k], wx + px * o / M_X, wy + py * o / M_Y, 1.3, { involved: true }); });
+            defs.forEach(function (k, i) { var o = (i - 1.5) * 1.9; setMoverTarget(playerState[k], wx + px * o / M_X, wy + py * o / M_Y, 1.3, { involved: true }); });
             r.wall = defs; r.wallAt = { x: wx, y: wy };
             var gk = gkOf(opp);
             if (gk) setMoverTarget(playerState[gk], gx === 100 ? 99 : 1, clamp(50 + (r.spot.y - 50) * 0.12, 46, 54), 1.2, { involved: true });
@@ -3448,6 +3449,7 @@
         var offsideCall = /fuera de juego|bandera|banderin/.test(t) && /(levanta(do)? la bandera|levanta el banderin|senala (el )?fuera de juego|fuera de juego senalado|pita (el )?fuera de juego|anulado por fuera de juego)/.test(t) && !/no levanta/.test(t);
         var appeal = !offsideCall && /(pide fuera de juego|me parecio fuera de juego|desastre de fuera de juego|busco el fuera de juego|en claro fuera de juego)/.test(t);
         var isFoul = play.kind === 'foul' || ((play.kind === 'yellow' || play.kind === 'red') && /falta|derrib|entrada|zancadill|agarr|codazo|plancha|pisot|agrede/.test(t));
+        if (!isFoul && /^(clearance|play|counter|box|injury)$/.test(play.kind) && /(falta (peligrosa|muy cerca|cerca|de |sobre)|comete (una )?falta|derriba a)/.test(t)) isFoul = true;
         var first = phases[0], lp = first.ballPath || [], fp = lp[lp.length - 1] || { x: 50, y: 50 };
         if (offsideCall) {
             // El asistente levanta la bandera y saca el equipo que defendía, desde donde estaba el adelantado.
@@ -3488,6 +3490,14 @@
     // Saques de banda, de puerta y córners plausibles en el juego que la narración no detalla.
     function addPlausibleOut(phases, play, attack) {
         if (!phases.length) return;
+        // Jugada sin detalle: a veces empieza con un saque de banda que pone el balón donde arranca.
+        var q0 = (phases[0].ballPath || [])[0];
+        if (play.kind === 'play' && q0 && !phases[0].setPiece && rng() < 0.4) {
+            var tdir = attack === 'home' ? 1 : -1, ty = q0.y < 50 ? 0 : (q0.y > 50 ? 100 : (rng() < 0.5 ? 0 : 100));
+            phases[0].setPiece = { type: 'throw', side: attack, spot: { x: clamp(q0.x - tdir * (4 + rng() * 6), 4, 96), y: ty }, kick: { x: q0.x, y: q0.y, kind: 'lofted' } };
+            phases[0].ms = Math.max(phases[0].ms || 700, 2200);
+            return;
+        }
         var last = phases[phases.length - 1], lp = last.ballPath || [], e = lp[lp.length - 1];
         if (!e || e.kind) return;
         var dir = attack === 'home' ? 1 : -1;
@@ -3495,7 +3505,7 @@
             lp.push({ x: clamp(e.x + dir * (6 + rng() * 8), 3, 97), y: e.y < 50 ? -3 : 103, kind: 'lofted' });
         } else if (play.kind === 'wing' && rng() < 0.35 && (e.y < 18 || e.y > 82)) {
             lp.push({ x: clamp(e.x + dir * 6, 3, 97), y: e.y < 50 ? -2.5 : 102.5, kind: 'ground' });
-        } else if ((play.kind === 'play' || play.kind === 'counter') && rng() < 0.45) {
+        } else if ((play.kind === 'play' || play.kind === 'counter') && rng() < 0.6) {
             // Pase largo que se va por la banda: saque de banda para el rival.
             var wy = e.y < 50 ? -2.5 : 102.5;
             lp.push({ x: clamp(e.x + dir * (8 + rng() * 10), 6, 94), y: wy, kind: rng() < 0.5 ? 'lofted' : 'ground' });
@@ -3632,6 +3642,20 @@
         o.searchAt = now + 900 + rng() * 700;
     }
 
+    // Balón suelto sin jugada en curso: el más cercano va a por él (nunca se queda solo en el césped).
+    function simChaseLoose() {
+        var best = null, bd = 1e9;
+        Object.keys(playerState).forEach(function (k) {
+            var st = playerState[k];
+            if (st.leaving || st.down || st.pos === 'GK') return;
+            var dd = mDist(st.x, st.y, ball.x, ball.y);
+            if (dd < bd) { bd = dd; best = st; }
+        });
+        if (!best || bd < 0.3) return;
+        best.tx = ball.x; best.ty = ball.y; best.hx = ball.x; best.hy = ball.y; best.pend = null;
+        best.spd = Math.max(best.spd || 0, 6.5);
+    }
+
     function simStep(dt, ctx) {
         var now = nowMs();
         if (ctx.attack) simAttackSide = ctx.attack;
@@ -3645,6 +3669,7 @@
             if (motor.phaseT >= motor.phaseDur && !busy) startMotorPhase(motor.phases.length ? motor.phases.shift() : null);
             else if (motor.phaseT > motor.phaseDur + 4) { motor.actions = []; motor.action = null; startMotorPhase(motor.phases.length ? motor.phases.shift() : null); }
         } else if (ctx.search) simHolderSearch(now, ctx.attack);
+        if (!motor.phase && !simRestart && !ctx.frozen && ball.state === 'free' && !ball.lock && !ball.goalNet) simChaseLoose();
         var allowIdle = !simRestart && (!motor.phase || motor.phaseT > motor.phaseDur * 0.9);
         Object.keys(playerState).forEach(function (k) {
             var st = playerState[k];
@@ -3695,7 +3720,7 @@
         // Guardar el estado vivo y simular en un mundo aparte.
         var saved = { playerState: playerState, ball: ball, refState: refState, motor: motor, ends: ends.flipped };
         simulating = true; simClock = 0; simSeed = 12345; simLeavers = {}; simScene = null; simFlipped = false;
-        simRestart = null; simEvents = []; simNs = 0; simGoalPlay = false; simAttackSide = 'home'; simExiting = false; simInitAR();
+        simDbg = []; simRestart = null; simEvents = []; simNs = 0; simGoalPlay = false; simAttackSide = 'home'; simExiting = false; simInitAR();
         simStaff = [{ on: false, x: 0, y: 0, vx: 0, vy: 0, spd: 5 }, { on: false, x: 0, y: 0, vx: 0, vy: 0, spd: 5 }, { on: false, x: 0, y: 0, vx: 0, vy: 0, spd: 2 }];
         var ns = 0;
         try {
@@ -3713,6 +3738,7 @@
             function record() {
                 if (ns >= S) return;
                 simNs = ns;
+                if (window.__campoDbg) simDbg[ns] = (simRestart ? simRestart.type[0] + simRestart.stage : '-') + (motor.phase ? 'P' + motor.phases.length : '_') + (motor.action ? 'A' : '') + motor.actions.length + (ball.lock ? 'L' : '') + (ball.goalNet ? 'N' : '') + (function () { var bd = 99; Object.keys(playerState).forEach(function (k) { var st = playerState[k]; bd = Math.min(bd, mDist(st.x, st.y, ball.x, ball.y)); }); return 'd' + bd.toFixed(1); })();
                 var base = ns * N;
                 figs.forEach(function (f, i) {
                     var o = null, flag = 0;
@@ -5055,7 +5081,7 @@
                 actions: motor.actions.length + (motor.action ? 1 : 0), scale: motor.scale, lagM: n ? lag / n : 0, frame: motor.frame, stats: motor.stats };
         },
         debugBall: function (a, b) {
-            var out = []; for (var q = a; q < Math.min(b, tl.S); q++) out.push(q + ':' + tl.BX[q].toFixed(1) + ',' + tl.BY[q].toFixed(1) + ',' + tl.BH[q].toFixed(1) + ',' + tl.BS[q] + ',' + tl.BO[q]);
+            var out = []; for (var q = a; q < Math.min(b, tl.S); q++) out.push(q + ':' + tl.BX[q].toFixed(1) + ',' + tl.BY[q].toFixed(1) + ',' + tl.BH[q].toFixed(1) + ',' + tl.BS[q] + ',' + tl.BO[q] + ',' + simDbg[q]);
             return out.join(' ');
         },
         debugSegs: function () { return tl.segs.map(function (g) { return g.i + ':' + g.kind + ':' + g.s0 + '-' + g.s1 + (g.flipped ? 'F' : ''); }).join(' '); },
