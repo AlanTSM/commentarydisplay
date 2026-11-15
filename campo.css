@@ -325,3 +325,7 @@ html.campo-noscroll, html.campo-noscroll body { overflow: hidden; }
 .campo-players.campo-sad-away .campo-player[data-side="away"] { opacity: 0.62; }
 .campo-goal-banner { pointer-events: none; animation: campo-goal-pop 0.35s ease-out; transform-box: fill-box; transform-origin: center; }
 @keyframes campo-goal-pop { 0% { opacity: 0; } 100% { opacity: 1; } }
+
+/* Sesión 14: gesto del VAR (el árbitro dibuja la pantalla) */
+.campo-var-tv { stroke-dasharray: 150; stroke-dashoffset: 150; animation: campo-var-draw 0.9s ease-out forwards; }
+@keyframes campo-var-draw { to { stroke-dashoffset: 0; } }

@@ -2502,7 +2502,8 @@
         if (ends.bannerEl && ends.bannerEl.parentNode) ends.bannerEl.parentNode.removeChild(ends.bannerEl);
         var p = toSvg(50, 8);
         var g = svgEl('g', { 'class': 'campo-banner', transform: 'translate(' + p.x + ',' + p.y + ')' });
-        g.appendChild(svgEl('rect', { x: -120, y: -17, width: 240, height: 30, rx: 15, fill: 'rgba(10,20,15,0.78)', stroke: 'rgba(255,255,255,0.5)', 'stroke-width': 1.5 }));
+        var bw = Math.max(240, Math.min(1000, text.length * 8.6 + 40));
+        g.appendChild(svgEl('rect', { x: -bw / 2, y: -17, width: bw, height: 30, rx: 15, fill: 'rgba(10,20,15,0.78)', stroke: 'rgba(255,255,255,0.5)', 'stroke-width': 1.5 }));
         var t = svgEl('text', { x: 0, y: 4, 'text-anchor': 'middle', fill: '#fff', 'font-size': 15, 'font-weight': 700, 'font-family': 'Segoe UI, sans-serif' });
         t.textContent = text;
         g.appendChild(t);
@@ -3709,7 +3710,7 @@
             var res = null;
             try { res = resolvePlay(play, Object.assign({}, d)); } catch (e) { res = null; }
             if (res && res.highlight) highlightPlayers(res.highlight);
-            if (!immediate) managerReact(play, d);
+            if (!immediate) { managerReact(play, d); varFx(play); }
         } else highlightPlayers([]);
     }
 
@@ -3829,6 +3830,25 @@
         ends.flipped = false;           // la línea temporal ya está en coordenadas de pantalla
         placeBall();
         ends.flipped = sv;
+    }
+
+    /* ---- VAR: el árbitro dibuja la pantalla, aviso de consulta y luego la decisión ---- */
+    var varTimers = [];
+    function varFx(play) {
+        var txt = String(play.text || '').replace(/\s+/g, ' ');
+        if (!/\bVAR\b/.test(txt)) return;
+        varTimers.forEach(clearTimeout); varTimers = [];
+        var m = txt.match(/VAR\s*\(([^)]*)\)\s*:\s*([^.…]+?)(?:\s*\.\.\.|\s*$|\.)/);
+        var motivo = m ? m[1].trim() : '';
+        var decision = m ? m[2].trim() : (/anula/i.test(txt) ? 'se anula' : (/confirma|se mantiene|válid/i.test(txt) ? 'se confirma' : ''));
+        showBanner('Se consulta al VAR' + (motivo ? ' · ' + motivo : ''));
+        var refNode = tlNodes && tlNodes.filter(function (n) { return n.f.type === 'ref'; })[0];
+        if (refNode) {
+            var tv = svgEl('rect', { 'class': 'campo-var-tv', x: -22, y: -46, width: 44, height: 28, rx: 3, fill: 'none', stroke: '#fff', 'stroke-width': 3 });
+            refNode.el.appendChild(tv);
+            varTimers.push(setTimeout(function () { if (tv.parentNode) tv.parentNode.removeChild(tv); }, 2600));
+        }
+        if (decision) varTimers.push(setTimeout(function () { showBanner('VAR: ' + decision.charAt(0).toUpperCase() + decision.slice(1)); }, 2700));
     }
 
     /* ---- Gol: la red se mueve y aviso «¡GOL!» con el marcador ---- */
