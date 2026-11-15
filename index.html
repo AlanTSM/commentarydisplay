@@ -7973,6 +7973,19 @@
                 finished: matchFinished,
                 seeking: campoSeekUntil != null || campoSeekPlayIndex != null || campoSeekUntilLine != null,
                 redCarded: Array.from(redCardedPlayers || []),
+                // Para el coreógrafo de la vista de campo: alineaciones iniciales y expulsiones de todo el partido.
+                homeStartersInit: (window.homeStartersData || []).map(function(p){ return { name: p.name, position: p.position }; }),
+                awayStartersInit: (window.awayStartersData || []).map(function(p){ return { name: p.name, position: p.position }; }),
+                homeSubsInit: (window.homeSubsData || []).map(function(p){ return { name: p.name, position: p.position }; }),
+                awaySubsInit: (window.awaySubsData || []).map(function(p){ return { name: p.name, position: p.position }; }),
+                redCardEvents: (function(){
+                    const out = [];
+                    ['home', 'away'].forEach(function(side){
+                        const h = matchHighlights && matchHighlights[side];
+                        ((h && h.redCards) || []).forEach(function(e){ out.push({ side: side, name: e.player, minute: e.minute }); });
+                    });
+                    return out;
+                })(),
                 score: (document.getElementById('score') || {}).textContent || '0 - 0',
                 narration: (document.getElementById('narration') || {}).textContent || '',
                 playersIn: findPlayersInText,
@@ -7992,6 +8005,12 @@
                     return m ? m[1].trim() : '';
                 })()
             };
+        };
+
+        // Reloj barato para la animación de la vista de campo (se consulta en cada fotograma).
+        window.getCampoClock = function() {
+            return { started: simulationStarted, paused: isPaused, finished: matchFinished,
+                seeking: campoSeekUntil != null || campoSeekPlayIndex != null || campoSeekUntilLine != null };
         };
 
         window.switchTab = switchTab;

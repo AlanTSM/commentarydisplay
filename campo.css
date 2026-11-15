@@ -308,3 +308,20 @@ html.campo-noscroll, html.campo-noscroll body { overflow: hidden; }
 .campo-player.campo-leaving .campo-name { opacity: 0.85; }
 .campo-bench-player text, .campo-manager text { pointer-events: none; }
 .campo-banner { pointer-events: none; }
+
+/* Sesiones 11-13: red que se mueve, cabizbajos tras un gol */
+.campo-net { transform-box: fill-box; }
+.campo-net-r { transform-origin: left center; }
+.campo-net-l { transform-origin: right center; }
+.campo-net-hit { animation: campo-net-hit 0.9s ease-out; }
+@keyframes campo-net-hit {
+    0% { transform: scaleX(1); }
+    25% { transform: scaleX(1.9) scaleY(1.06); }
+    55% { transform: scaleX(0.85); }
+    80% { transform: scaleX(1.15); }
+    100% { transform: scaleX(1); }
+}
+.campo-players.campo-sad-home .campo-player[data-side="home"],
+.campo-players.campo-sad-away .campo-player[data-side="away"] { opacity: 0.62; }
+.campo-goal-banner { pointer-events: none; animation: campo-goal-pop 0.35s ease-out; transform-box: fill-box; transform-origin: center; }
+@keyframes campo-goal-pop { 0% { opacity: 0; } 100% { opacity: 1; } }
