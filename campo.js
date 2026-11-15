@@ -2118,10 +2118,11 @@
         var lo = ball.owner && playerState[ball.owner];
         ball.lastSide = lo ? lo.side : (simulating ? simAttackSide : ball.lastSide);
         ball.goalNet = false;
+        if (simulating && kind === 'over') simEvent('over', to.x, to.y);
         ball.state = 'flight';
         ball.owner = null;
         ball.lock = false;
-        ball.fl = { from: from, to: { x: to.x, y: to.y }, t: 0, dur: dur, kind: kind, H: kind === 'lofted' ? clamp(dist / 30, 0.35, 1.1) : (kind === 'reset' ? 0.5 : (kind === 'over' ? 2.4 : 0)), receiver: receiver || null };
+        ball.fl = { from: from, to: { x: to.x, y: to.y }, t: 0, dur: dur, kind: kind, H: kind === 'lofted' ? clamp(dist / 30, 0.35, 1.1) : (kind === 'reset' ? 0.5 : (kind === 'over' ? 3 : 0)), receiver: receiver || null };
     }
 
     function startAction(a) {
@@ -2183,7 +2184,8 @@
             var e = f.kind === 'ground' ? 1 - Math.pow(1 - u, 1.6) : u;
             ball.x = lerp(f.from.x, f.to.x, e);
             ball.y = lerp(f.from.y, f.to.y, e);
-            ball.h = f.H ? Math.sin(Math.PI * u) * f.H : 0;
+            // Por encima del larguero: sube hasta pasada la portería y cae ya detrás de ella.
+            ball.h = f.H ? Math.sin(Math.PI * (f.kind === 'over' ? Math.pow(u, 1.7) : u)) * f.H : 0;
             if (u >= 1) {
                 ball.state = 'free';
                 ball.h = 0;
@@ -2196,7 +2198,7 @@
         if (ball.state === 'held') {
             var o = holderOf(ball.owner);
             if (!o) { ball.state = 'free'; return; }
-            if (o.throwing) { ball.x = o.x; ball.y = o.y; ball.h = 0.55; return; }   // saque de banda: balón sobre la cabeza
+            if (o.throwing) { ball.x = o.x; ball.y = o.y; ball.h = 0.62; return; }   // saque de banda: balón sobre la cabeza
             var sp = Math.hypot(o.vx || 0, o.vy || 0);
             var fx, fy;
             if (sp > 0.4) { fx = o.vx / sp; fy = o.vy / sp; }
@@ -3126,7 +3128,7 @@
         var snap = clonePlayers(last.players);
         var path = null;
         if (oc === 'wide') path = [from, { x: gx + dir * 1.6, y: 50 + side * (5.6 + rng() * 3.5), kind: 'shot' }];
-        else if (oc === 'over') path = [from, { x: gx + dir * 3.4, y: 50 + side * rng() * 2.5, kind: 'over' }];   // pasa por encima y cae detrás de la portería
+        else if (oc === 'over') path = [from, { x: gx + dir * 2.6, y: 50 + side * rng() * 2.5, kind: 'over' }];   // pasa por encima y cae detrás de la portería
         else if (oc === 'post') {
             var post = { x: gx - dir * 0.3, y: 50 + side * 3.6, kind: 'shot' };
             path = [from, post, { x: gx - dir * 9, y: 50 + side * 14, kind: 'ground' }];
@@ -3240,11 +3242,11 @@
 
     /* ---------------- Sesiones 15-17: reanudaciones (banda, puerta, córner, centro), faltas con y sin
        barrera, fueras de juego, linieres y protestas. Todo ocurre dentro de la simulación del coreógrafo. ---- */
-    var simDbg = [];
+    var simDbg = [], simSegT = 99;
     var simRestart = null, simEvents = [], simNs = 0, simAR = [], simGoalPlay = false, simAttackSide = 'home', simExiting = false;
     var RESTART_PREP = { throw: 1.3, goalkick: 1.9, corner: 2.1, free: 1.5, wall: 2.8, offside: 1.8 };
     var EVENT_LABEL = { throw: 'Saque de banda', goalkick: 'Saque de puerta', corner: 'Córner', free: 'Falta', wall: 'Falta · barrera',
-        offside: 'Fuera de juego', kickoff: 'Saque de centro', protest: 'Protestas', appeal: '¿Fuera de juego?' };
+        offside: 'Fuera de juego', kickoff: 'Saque de centro', protest: 'Protestas', over: 'Por encima del larguero', appeal: '¿Fuera de juego?' };
 
     function goalXOf(side) { return side === 'home' ? 100 : 0; }   // portería a la que ataca ese equipo
     function oppOf(side) { return side === 'home' ? 'away' : 'home'; }
@@ -3374,7 +3376,7 @@
         ball.lastSide = r.side;
         if (r.type === 'throw') ball.fl.H = 0.45;
         if (r.kick && r.kick.net) ball.fl.net = true;
-        if (r.kick && r.kick.kind === 'over') ball.fl.H = 2.4;
+        if (r.kick && r.kick.kind === 'over') ball.fl.H = 3;
         if (motor.phase === r.phase) { motor.actions = []; motor.action = null; }
     }
 
@@ -3469,7 +3471,7 @@
                 var gdx = (fgx - spot.x) * M_X, gdy = (50 - spot.y) * M_Y, gl = Math.max(0.1, Math.hypot(gdx, gdy));
                 var wallAt = { x: spot.x + gdx / gl * 9.15 / M_X, y: spot.y + gdy / gl * 9.15 / M_Y };
                 if (/barrera/.test(t) && /estrell|rebota|choca|se queda|despeja/.test(t)) kick = { x: wallAt.x, y: wallAt.y, kind: 'shot' };
-                else if (/larguero|por encima|alto|arriba|nubes/.test(t)) kick = { x: fgx + fdir * 3.4, y: 50 + side * rng() * 2.5, kind: 'over', net: true };
+                else if (/larguero|por encima|alto|arriba|nubes/.test(t)) kick = { x: fgx + fdir * 2.6, y: 50 + side * rng() * 2.5, kind: 'over', net: true };
                 else if (/portero|ataja|vuela|atrapa|blocad|saca la falta|despeja/.test(t)) kick = { x: fgx - fdir * 1.2, y: 50 + side * 2.5, kind: 'shot' };
                 else kick = { x: fgx + fdir * 1.8, y: 50 + side * (5.6 + rng() * 3), kind: 'shot', net: true };
             }
@@ -3492,7 +3494,7 @@
         if (!phases.length) return;
         // Jugada sin detalle: a veces empieza con un saque de banda que pone el balón donde arranca.
         var q0 = (phases[0].ballPath || [])[0];
-        if (play.kind === 'play' && q0 && !phases[0].setPiece && rng() < 0.4) {
+        if (play.kind === 'play' && q0 && !phases[0].setPiece && simSegT >= 3.9 && rng() < 0.6) {
             var tdir = attack === 'home' ? 1 : -1, ty = q0.y < 50 ? 0 : (q0.y > 50 ? 100 : (rng() < 0.5 ? 0 : 100));
             phases[0].setPiece = { type: 'throw', side: attack, spot: { x: clamp(q0.x - tdir * (4 + rng() * 6), 4, 96), y: ty }, kick: { x: q0.x, y: q0.y, kind: 'lofted' } };
             phases[0].ms = Math.max(phases[0].ms || 700, 2200);
@@ -3783,6 +3785,7 @@
                 // Altas que no han entrado por un cambio narrado (por si acaso): aparecen desde el banquillo.
                 var dP = Object.assign({}, d, { homeStarters: h.before.home, awayStarters: h.before.away, redCarded: [] });
                 var T = segDur[i];
+                simSegT = T;
                 var plan = planPlay(play, dP);
                 simGoalPlay = play.kind === 'goal' || play.kind === 'own-goal';
                 simAttackSide = plan.info.attack;
@@ -3973,8 +3976,10 @@
     // Brazos en alto (saque de banda) y bocadillo de protesta, ocultos salvo cuando toca.
     function addGestures(el) {
         var arms = svgEl('g', { 'class': 'campo-arms' });
-        arms.appendChild(svgEl('line', { x1: -9, y1: -12, x2: -6, y2: -27, stroke: '#fff', 'stroke-width': 3.2, 'stroke-linecap': 'round' }));
-        arms.appendChild(svgEl('line', { x1: 9, y1: -12, x2: 6, y2: -27, stroke: '#fff', 'stroke-width': 3.2, 'stroke-linecap': 'round' }));
+        [-1, 1].forEach(function (sx) {
+            arms.appendChild(svgEl('line', { x1: sx * 16, y1: -10, x2: sx * 11, y2: -38, stroke: '#1b1b1b', 'stroke-width': 8, 'stroke-linecap': 'round' }));
+            arms.appendChild(svgEl('line', { x1: sx * 16, y1: -10, x2: sx * 11, y2: -38, stroke: '#f5d9b8', 'stroke-width': 5, 'stroke-linecap': 'round' }));
+        });
         el.insertBefore(arms, el.firstChild);
         var bub = svgEl('g', { 'class': 'campo-bubble', transform: 'translate(15,-24)' });
         bub.appendChild(svgEl('circle', { r: 9, fill: '#fff', stroke: '#b91c1c', 'stroke-width': 2 }));
@@ -4002,9 +4007,10 @@
         var top = root && root.querySelector('svg');
         var label = EVENT_LABEL[e.type];
         if (!top || !label) return;
-        var p = toSvg(clamp(e.x, 8, 92), clamp(e.y, 6, 94));
+        var p = toSvg(clamp(e.x, 8, 92), clamp(e.y, 2, 98));
         var w = label.length * 8.2 + 22;
-        var g = svgEl('g', { 'class': 'campo-tag campo-tag-' + e.type, transform: 'translate(' + p.x.toFixed(1) + ',' + (p.y - 38).toFixed(1) + ')' });
+        var ty = e.y < 22 ? p.y + 50 : p.y - 40;   // junto a la banda de arriba, el rótulo va debajo para no tapar al que saca
+        var g = svgEl('g', { 'class': 'campo-tag campo-tag-' + e.type, transform: 'translate(' + p.x.toFixed(1) + ',' + ty.toFixed(1) + ')' });
         g.appendChild(svgEl('rect', { x: -w / 2, y: -14, width: w, height: 24, rx: 12, fill: 'rgba(8,14,10,0.82)', stroke: e.type === 'offside' ? '#facc15' : 'rgba(255,255,255,0.6)', 'stroke-width': 1.5 }));
         var t = svgEl('text', { y: 3, 'text-anchor': 'middle', fill: '#fff', 'font-size': 13.5, 'font-weight': 700, 'font-family': 'Segoe UI, sans-serif' });
         t.textContent = label;
@@ -5079,6 +5085,18 @@
             return { ball: { x: ball.x, y: ball.y, h: ball.h, state: ball.state, owner: ball.owner, lock: !!ball.lock },
                 phase: !!motor.phase, phaseT: motor.phaseT, phaseDur: motor.phaseDur, queued: motor.phases.length,
                 actions: motor.actions.length + (motor.action ? 1 : 0), scale: motor.scale, lagM: n ? lag / n : 0, frame: motor.frame, stats: motor.stats };
+        },
+        // Pinta el instante s de la línea de tiempo (para capturas): sin reproducción en curso.
+        debugRender: function (s, tags) {
+            if (!tl) return null;
+            var k = 0; for (var j = 0; j < tl.segs.length; j++) if (tl.segs[j].s0 <= s) k = j;
+            var sg = tl.segs[k]; sg.k = k;
+            pb.seg = sg; pb.s = s; pb.lastS = s; pb.snap = true; pb.fadeSt = null; pb.fadeOff = 0;
+            if (pb.off) for (var q = 0; q < pb.off.length; q++) pb.off[q] = 0;
+            pb.boff = [0, 0];
+            if (tags !== false) (tl.events || []).forEach(function (e) { if (e.s <= s && e.s > s - 9) showTag(e); });
+            tlFrame(0);
+            return { seg: sg.i, kind: sg.kind };
         },
         debugBall: function (a, b) {
             var out = []; for (var q = a; q < Math.min(b, tl.S); q++) out.push(q + ':' + tl.BX[q].toFixed(1) + ',' + tl.BY[q].toFixed(1) + ',' + tl.BH[q].toFixed(1) + ',' + tl.BS[q] + ',' + tl.BO[q] + ',' + simDbg[q]);
