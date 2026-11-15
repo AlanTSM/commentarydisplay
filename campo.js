@@ -2120,10 +2120,12 @@
         ball.lastSide = lo ? lo.side : (simulating ? simAttackSide : ball.lastSide);
         ball.goalNet = false;
         if (simulating && kind === 'over') simEvent('over', to.x, to.y);
+        var uLine = 0;
+        if (kind === 'over') { var gxl = to.x > 50 ? 100 : 0; uLine = Math.abs(to.x - from.x) > 0.5 ? clamp(Math.abs(gxl - from.x) / Math.abs(to.x - from.x), 0.5, 0.97) : 0; }
         ball.state = 'flight';
         ball.owner = null;
         ball.lock = false;
-        ball.fl = { from: from, to: { x: to.x, y: to.y }, t: 0, dur: dur, kind: kind, H: kind === 'lofted' ? clamp(dist / 30, 0.35, 1.1) : (kind === 'reset' ? 0.5 : (kind === 'over' ? 3 : 0)), receiver: receiver || null };
+        ball.fl = { from: from, to: { x: to.x, y: to.y }, t: 0, dur: dur, kind: kind, H: kind === 'lofted' ? clamp(dist / 30, 0.35, 1.1) : (kind === 'reset' ? 0.5 : (kind === 'over' ? 2.6 : 0)), receiver: receiver || null, uLine: uLine };
     }
 
     function startAction(a) {
@@ -2186,7 +2188,8 @@
             ball.x = lerp(f.from.x, f.to.x, e);
             ball.y = lerp(f.from.y, f.to.y, e);
             // Por encima del larguero: sube hasta pasada la portería y cae ya detrás de ella.
-            ball.h = f.H ? Math.sin(Math.PI * (f.kind === 'over' ? Math.pow(u, 1.7) : u)) * f.H : 0;
+            if (f.kind === 'over' && f.uLine > 0 && f.uLine < 1) ball.h = f.H * (u < f.uLine ? Math.sin(Math.PI / 2 * u / f.uLine) : Math.cos(Math.PI / 2 * (u - f.uLine) / (1 - f.uLine)));   // lo más alto, justo sobre el larguero
+            else ball.h = f.H ? Math.sin(Math.PI * u) * f.H : 0;
             if (u >= 1) {
                 ball.state = 'free';
                 ball.h = 0;
@@ -3387,7 +3390,7 @@
         ball.lastSide = r.side;
         if (r.type === 'throw') ball.fl.H = 0.45;
         if (r.kick && r.kick.net) ball.fl.net = true;
-        if (r.kick && r.kick.kind === 'over') ball.fl.H = 3;
+        if (r.kick && r.kick.kind === 'over') ball.fl.H = 2.6;
         // Hecha la reanudación, la fase acaba enseguida y el juego sigue (nadie se queda congelado).
         if (motor.phase === r.phase) { motor.actions = []; motor.action = null; if (motor.phase) motor.phaseDur = Math.min(motor.phaseDur, motor.phaseT + 0.8); }
     }
@@ -3808,7 +3811,7 @@
                 simGoalPlay = play.kind === 'goal' || play.kind === 'own-goal';
                 simAttackSide = plan.info.attack;
                 // Una reanudación pendiente sigue su curso en la jugada siguiente (la jugada espera); en los goles se ejecuta ya.
-                if (simRestart && (simGoalPlay || plan.phases.some(function (q) { return q.setPiece; }))) restartKick(simRestart);
+                if (simRestart && (simGoalPlay || plan.phases.some(function (q) { return q.setPiece || (q.ballPath || []).some(function (pt) { return pt.kind === 'shot' || pt.kind === 'over'; }); }))) restartKick(simRestart);
                 seg.attack = plan.info.attack; seg.outcome = plan.info.outcome; seg.fixed = plan.info.fixed;
                 var isSub = h.events.some(function (e) { return e.type === 'sub'; });
                 var ctx = { attack: plan.info.attack, frozen: false, search: true };
