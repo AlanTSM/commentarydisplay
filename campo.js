@@ -2077,6 +2077,10 @@
             return { pt: pt, who: best };
         });
         var acts = [];
+        if (simulating && ph.kickoff && path.length && mDist(ball.x, ball.y, path[0].x, path[0].y) > 6 && ball.state !== 'flight') {
+            // Saque de centro: el balón vuelve al centro de un envío (nadie lo conduce 40 m).
+            acts.push({ type: 'kick', pt: { x: path[0].x, y: path[0].y }, forceKind: 'reset' });
+        }
         var prevWho = ball.state === 'held' ? ball.owner : null;
         var prevPt = { x: ball.x, y: ball.y };
         for (var i = 0; i < nodes.length; i++) {
@@ -2107,7 +2111,9 @@
         var tp = tempo();
         var from = { x: ball.x, y: ball.y };
         var dist = Math.max(0.5, mDist(from.x, from.y, to.x, to.y));
-        var spd = Math.min(36, (BALL_SPEED[kind === 'over' ? 'shot' : kind] || 14) * tp);   // tope: ni en «Turbo» el balón salta
+        var base = BALL_SPEED[kind === 'over' ? 'shot' : kind] || 14;
+        if (kind === 'lofted' || kind === 'ground' || kind === 'reset') base += Math.min(10, Math.max(0, dist - 20) * 0.2);   // los envíos largos van más fuertes
+        var spd = Math.min(36, base * tp);   // tope: ni en «Turbo» el balón salta
         var dur = dist / spd + (kind === 'lofted' ? 0.25 / tp : 0);
         ball.state = 'flight';
         ball.owner = null;
@@ -2227,7 +2233,8 @@
             var inv = involved[k] || involved[st.name];
             if (st.hold) { st.hx = t.x; st.hy = t.y; return; }   // atendido por las asistencias
             // Vuelta a la posición (tras gol, falta, saque...): se vuelve trotando, sin prisas.
-            setMoverTarget(st, t.x, t.y, dur, { involved: inv, jog: ph.pose === false && !ph.kickoff, cap: ph.spdCap && ph.spdCap[k] });
+            var celeb = ph.pose === true && ph.goal && k.split(':')[0] === ph.goal;   // corren a abrazar al goleador
+            setMoverTarget(st, t.x, t.y, celeb ? Math.min(dur, 1.9) : dur, { involved: inv || celeb, jog: ph.pose === false && !ph.kickoff, cap: ph.spdCap && ph.spdCap[k] });
         });
         if (ph.ref) {
             refState.tx = ph.ref.x; refState.ty = ph.ref.y; refState.hx = ph.ref.x; refState.hy = ph.ref.y;
@@ -3157,11 +3164,29 @@
         cel.players[scorer] = c;
         var others = mates.filter(function (k) { return k !== scorer && !isGkKey(k); });
         others.sort(function (a, b) { return mDist(cel.players[a].x, cel.players[a].y, c.x, c.y) - mDist(cel.players[b].x, cel.players[b].y, c.x, c.y); });
+        // Los cinco más cercanos le abrazan; el resto se acerca a unos metros, del lado del centro del campo.
         others.forEach(function (k, i) {
-            var ring = i < 6 ? 2.6 : 5.2;
-            var n = i < 6 ? Math.min(6, others.length) : Math.max(1, others.length - 6);
-            var a = (i < 6 ? i : i - 6) / n * Math.PI * 2 + (i < 6 ? 0 : 0.5);
-            cel.players[k] = { x: clamp(c.x + Math.cos(a) * ring / M_X, 2, 98), y: clamp(c.y + Math.sin(a) * ring / M_Y, 3, 97) };
+            var t;
+            if (i < 5) {
+                var a = i / Math.min(5, others.length) * Math.PI * 2;
+                t = { x: c.x + Math.cos(a) * 2.2 / M_X, y: c.y + Math.sin(a) * 2.2 / M_Y };
+            } else {
+                var toC = Math.atan2((50 - c.y) * M_Y, (50 - c.x) * M_X);
+                var a2 = toC + ((i - 5) / Math.max(1, others.length - 6) - 0.5) * 2.0;
+                var r2 = 7 + (i % 2) * 3;
+                t = { x: c.x + Math.cos(a2) * r2 / M_X, y: c.y + Math.sin(a2) * r2 / M_Y };
+            }
+            cel.players[k] = { x: clamp(t.x, 2, 98), y: clamp(t.y, 3, 97) };
+        });
+        // Los rivales no se meten en la celebración: se apartan cabizbajos.
+        Object.keys(cel.players).forEach(function (k) {
+            if (k.split(':')[0] === scorerSide) return;
+            var q = cel.players[k], dm = mDist(q.x, q.y, c.x, c.y);
+            if (dm < 12 && !isGkKey(k)) {
+                var ang = Math.atan2((q.y - c.y) * M_Y, (q.x - c.x) * M_X);
+                if (dm < 0.5) ang = Math.atan2((50 - c.y) * M_Y, (50 - c.x) * M_X);
+                cel.players[k] = { x: clamp(c.x + Math.cos(ang) * 13 / M_X, 2, 98), y: clamp(c.y + Math.sin(ang) * 13 / M_Y, 3, 97) };
+            }
         });
         cel.spdCap = {};
         Object.keys(cel.players).forEach(function (k) { if (k.split(':')[0] !== scorerSide) cel.spdCap[k] = 1.5; });
@@ -3441,6 +3466,19 @@
                     var avail = T * 0.82;
                     var sum = phases.reduce(function (a, q) { return a + (q.ms || 700) / 1000; }, 0);
                     motor.scale = clamp(avail / Math.max(0.3, sum), 0.5, 4.5);
+                    var celI = phases.findIndex(function (q) { return q.pose === true; });
+                    if ((play.kind === 'goal' || play.kind === 'own-goal') && celI > 0) {
+                        // Gol: la jugada llega pronto al remate y queda tiempo para celebrarlo y sacar de centro.
+                        var preSum = 0, postSum = 0;
+                        phases.forEach(function (q, qi) { if (qi < celI) preSum += (q.ms || 700); else if (q.pose !== true) postSum += (q.ms || 700); });
+                        var preT = T * 0.36, celT = T * 0.4, kickT = T * 0.12;
+                        phases.forEach(function (q, qi) {
+                            if (qi < celI) q.ms = (q.ms || 700) * preT * 1000 / Math.max(1, preSum);
+                            else if (q.pose === true) q.ms = celT * 1000;
+                            else q.ms = (q.ms || 700) * kickT * 1000 / Math.max(1, postSum);
+                        });
+                        motor.scale = 1;
+                    }
                     motor.phases = phases.slice(1);
                     motor.actions = []; motor.action = null;
                     startMotorPhase(phases[0]);
@@ -3463,7 +3501,7 @@
                     } else if (e.type === 'red') simLeave(k, 'red');
                 });
                 var poseS = null, goalS = null, sadEnd = null, lastPhase = motor.phase;
-                var segT0 = simClock, outForced = false, outIdx = -1;
+                var segT0 = simClock, outForced = false, outIdx = -1, sawNet = false, goalJumped = false;
                 if (phases && !seg.pause) phases.forEach(function (ph, qi) { if (outIdx < 0 && (ph.ballPath || []).some(function (q) { return q.kind === 'shot' || q.kind === 'over'; })) outIdx = qi; });
                 advance(T, ctx, function () {
                     if (motor.phase !== lastPhase) {
@@ -3485,7 +3523,27 @@
                             if (kicks.length) { motor.actions = kicks; motor.action = null; }
                         }
                     }
-                    var lateGoal = isGoalPlay && simClock - segT0 > T * 0.5 && motor.phase && phases.indexOf(motor.phase) >= 0 && phases.indexOf(motor.phase) < phases.findIndex(function (q) { return q.pose === true; });
+                    var lateGoal = isGoalPlay && simClock - segT0 > T * 0.3 && motor.phase && phases.indexOf(motor.phase) >= 0 && phases.indexOf(motor.phase) < phases.findIndex(function (q) { return q.pose === true; });
+                    if (lateGoal && !goalJumped && goalS == null && !(ball.fl && ball.fl.net)) {
+                        // Va con retraso: se pasa directamente a la fase del remate (pase al goleador y disparo).
+                        goalJumped = true;
+                        var shotIdx = -1;
+                        phases.forEach(function (ph, qi) { if ((ph.ballPath || []).some(function (q) { return q.kind === 'shot' && (q.x > 100 || q.x < 0); })) shotIdx = qi; });
+                        var curI = phases.indexOf(motor.phase);
+                        if (shotIdx > curI && ball.state !== 'flight') {
+                            motor.actions = []; motor.action = null;
+                            motor.phases = phases.slice(shotIdx + 1);
+                            startMotorPhase(phases[shotIdx]);
+                            var sp0 = phases[shotIdx].ballPath[0];
+                            var fk = motor.actions.filter(function (q) { return q.forceKind; });
+                            if (sp0 && !sp0.kind && mDist(ball.x, ball.y, sp0.x, sp0.y) > 8) {
+                                motor.actions = [{ type: 'kick', pt: { x: sp0.x, y: sp0.y }, forceKind: 'lofted' }].concat(fk);
+                                motor.action = null;
+                            }
+                            lateGoal = false;
+                        }
+                    }
+                    lateGoal = lateGoal && simClock - segT0 > T * 0.55;
                     if (isGoalPlay && goalS == null && !ball.lock && ((motor.phase && motor.phase.pose === true) || lateGoal) && !(ball.fl && ball.fl.net)) {
                         var celIdx = -1;
                         phases.forEach(function (ph, qi) { if (ph.pose === true && celIdx < 0) celIdx = qi; });
@@ -3499,7 +3557,8 @@
                         launchBall({ x: netTo.x, y: clamp(netTo.y, 45.5, 54.5) }, 'shot', null);
                         ball.fl.net = true;
                     }
-                    if (goalS == null && isGoalPlay && ball.lock) goalS = ns;
+                    if (ball.fl && ball.fl.net) sawNet = true;
+                    if (goalS == null && isGoalPlay && ball.lock && sawNet) goalS = ns;
                 });
                 seg.s1 = ns;
                 seg.pose = poseS != null ? poseS : Math.max(seg.s0, ns - 2);
@@ -3739,22 +3798,23 @@
         var right = tl.BX[seg.goalS] > 50;
         var net = root && root.querySelector(right ? '.campo-net-r' : '.campo-net-l');
         if (net) { net.classList.remove('campo-net-hit'); void net.getBBox(); net.classList.add('campo-net-hit'); }
-        if (!offLayer || !d) return;
+        var top = root && root.querySelector('svg');
+        if (!top || !d) return;
         var plays = buildPlays(d);
         var score = previewScore(plays, seg.i, d);
         var team = seg.scorerSide === 'home' ? d.homeTeam : d.awayTeam;
-        var old = offLayer.querySelector('.campo-goal-banner');
+        var old = top.querySelector('.campo-goal-banner');
         if (old) old.remove();
-        var p = toSvg(50, 36);
+        var p = toSvg(50, 13);
         var g = svgEl('g', { 'class': 'campo-goal-banner', transform: 'translate(' + p.x + ',' + p.y + ')' });
         var kc = teamColorsOf(seg.scorerSide || 'home', d);
-        g.appendChild(svgEl('rect', { x: -190, y: -58, width: 380, height: 104, rx: 18, fill: 'rgba(8,14,10,0.86)', stroke: kitStyle(kc).fill, 'stroke-width': 4 }));
-        var t1 = svgEl('text', { x: 0, y: -8, 'text-anchor': 'middle', fill: '#fff', 'font-size': 52, 'font-weight': 900, 'font-family': 'Segoe UI, sans-serif', 'letter-spacing': 3 });
+        g.appendChild(svgEl('rect', { x: -170, y: -50, width: 340, height: 92, rx: 16, fill: 'rgba(8,14,10,0.88)', stroke: kitStyle(kc).fill, 'stroke-width': 4 }));
+        var t1 = svgEl('text', { x: 0, y: -6, 'text-anchor': 'middle', fill: '#fff', 'font-size': 46, 'font-weight': 900, 'font-family': 'Segoe UI, sans-serif', 'letter-spacing': 3 });
         t1.textContent = '¡GOL!';
-        var t2 = svgEl('text', { x: 0, y: 30, 'text-anchor': 'middle', fill: '#fde68a', 'font-size': 21, 'font-weight': 700, 'font-family': 'Segoe UI, sans-serif' });
+        var t2 = svgEl('text', { x: 0, y: 28, 'text-anchor': 'middle', fill: '#fde68a', 'font-size': 21, 'font-weight': 700, 'font-family': 'Segoe UI, sans-serif' });
         t2.textContent = (team || '') + '  ' + score;
         g.appendChild(t1); g.appendChild(t2);
-        offLayer.appendChild(g);
+        top.appendChild(g);
         setTimeout(function () { if (g.parentNode) g.parentNode.removeChild(g); }, 2900);
     }
 
@@ -4500,11 +4560,18 @@
             var r = planPlay(pl, d); return r.phases.map(function (ph) { return { ms: ph.ms, pose: ph.pose, goal: ph.goal, path: ph.ballPath }; });
         },
         debugPb: function () { return { s: pb.s, seg: pb.seg && pb.seg.k, i: pb.seg && pb.seg.i, bx: pb.dispB && pb.dispB[0], by: pb.dispB && pb.dispB[1], boff: pb.boff, own: tl && tl.BO[Math.floor(pb.s)] }; },
+        debugFig: function (name, i) {
+            var sg = tl.segByPlay[i], fi = tl.figs.findIndex(function (f) { return f.key && f.key.indexOf(name) >= 0; });
+            var out = [];
+            for (var q = sg.s0; q < sg.s1; q += 2) out.push([((q - sg.s0) * SAMPLE_DT).toFixed(1), tl.X[q * tl.N + fi].toFixed(1), tl.Y[q * tl.N + fi].toFixed(1), tl.BX[q].toFixed(1), tl.BS[q]]);
+            return { seg: [sg.s0, sg.goalS, sg.pose, sg.s1], out: out };
+        },
         debugChoreo: function () {
             if (!tl) return null;
             return { ms: Math.round(tl.ms), samples: tl.S, figures: tl.N, plays: tl.plays, segs: tl.segs.length, fixedPasses: tl.fixedPasses,
                 outcomes: tl.segs.filter(function (s) { return s.outcome; }).map(function (s) { return s.i + ':' + s.kind + ':' + s.outcome; }),
-                goals: tl.segs.filter(function (s) { return s.goalS != null; }).map(function (s) { return s.i; }), memKB: Math.round(tl.S * tl.N * 9 / 1024),
+                goals: tl.segs.filter(function (s) { return s.goalS != null; }).map(function (s) { return s.i; }),
+                goalTiming: tl.segs.filter(function (s) { return s.goalS != null; }).map(function (s) { return [s.i, (s.goalS - s.s0) * SAMPLE_DT, (s.pose - s.s0) * SAMPLE_DT, (s.s1 - s.s0) * SAMPLE_DT].map(function (v) { return Math.round(v * 10) / 10; }); }), memKB: Math.round(tl.S * tl.N * 9 / 1024),
                 ballJumps: (function () { var out = []; for (var q = 1; q < tl.S; q++) { var dm = Math.hypot((tl.BX[q] - tl.BX[q - 1]) * M_X, (tl.BY[q] - tl.BY[q - 1]) * M_Y); if (dm > 9) out.push(q + ':' + dm.toFixed(1) + ':' + tl.BS[q - 1] + '>' + tl.BS[q] + '@' + tl.BX[q-1].toFixed(1) + ',' + tl.BY[q-1].toFixed(1) + '>' + tl.BX[q].toFixed(1) + ',' + tl.BY[q].toFixed(1)); } return out; })(),
                 shotless: tl.segs.filter(function (sg) {
                     if (['shot', 'save', 'goal', 'oneonone'].indexOf(sg.kind) < 0) return false;
