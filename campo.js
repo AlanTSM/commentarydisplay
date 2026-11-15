@@ -3244,7 +3244,7 @@
         var lg = simLogOfVis(tgt.x, tgt.y);
         st.leaving = why; st.pend = null; st.hold = false;
         st.tx = lg.x; st.ty = lg.y; st.hx = null;
-        st.spd = why === 'red' ? 1.5 : (why === 'exit' ? 2.6 : 2.6);
+        st.spd = why === 'red' ? 1.5 : (why === 'exit' ? 3.1 : 3.6);
         simLeavers[k] = st;
         delete playerState[k];
         if (ball.owner === k) { ball.state = 'free'; ball.owner = null; }
@@ -3386,8 +3386,14 @@
         addFig('MED1', { type: 'medic' }); addFig('MED2', { type: 'medic' }); addFig('STR', { type: 'stretcher' });
         var N = figs.length;
         // Duración nominal de cada tramo (a «Medio», 2 s por línea).
-        var segDur = plays.map(function (p) { return Math.max(1, (p.lines && p.lines.length) || playLines(p)) * NOMINAL_LINE; });
-        var KICK = 1.6, EXIT = 22;
+        var segDur = plays.map(function (p) {
+            var t = Math.max(1, (p.lines && p.lines.length) || playLines(p)) * NOMINAL_LINE;
+            // Cambio: el juego se para el tiempo suficiente para que salga uno y entre el otro
+            // (la reproducción se queda un poco por detrás y luego se pone al día sin saltos).
+            if (p.kind === 'sub') t = Math.max(t, 4.6);
+            return t;
+        });
+        var KICK = 1.6, EXIT = 26;
         var total = KICK + segDur.reduce(function (a, b) { return a + b; }, 0) + EXIT;
         var S = Math.ceil(total / SAMPLE_DT) + 3;
         var X = new Float32Array(S * N), Y = new Float32Array(S * N), V = new Uint8Array(S * N), F = new Uint8Array(S * N);
@@ -3587,6 +3593,8 @@
         var segByPlay = {};
         // Huecos (figura aún no en el campo o ya retirada): se rellenan con su posición más cercana,
         // para que la interpolación no tire de ceros al aparecer o desaparecer.
+        // Al final de la retirada ya no queda nadie en el campo.
+        for (var zk = Math.max(0, ns - 3); zk < S; zk++) for (var zf = 0; zf < N; zf++) if (figs[zf].type === 'player') V[zk * N + zf] = 0;
         for (var fi = 0; fi < N; fi++) {
             var lastK = -1;
             for (var sk = 0; sk < S; sk++) {
@@ -3712,6 +3720,8 @@
         // Ponerse al día acelerando con suavidad, nunca saltando (tope global ×4, como el tempo del motor).
         if (behind > 0) rate = Math.min(Math.max(4, rate), rate * (1 + Math.min(1.2, behind / 2.5)));
         var adv = running || seg.i === -2 || (clock.finished && tl.segs[seg.k + 1] && tl.segs[seg.k + 1].i === -2);
+        // La retirada final va a su ritmo (unos 20 s), sea cual sea la velocidad de la narración.
+        if (clock.finished && (seg.i === -2 || pb.s >= seg.s1 - 1)) rate = Math.min(rate, 1.15);
         if (adv) pb.s += dt * rate / SAMPLE_DT;
         var heldT = 0;
         if (pb.s > lim) { heldT = (pb.s - lim) * SAMPLE_DT; pb.s = lim; }
@@ -4571,6 +4581,10 @@
             return { ms: Math.round(tl.ms), samples: tl.S, figures: tl.N, plays: tl.plays, segs: tl.segs.length, fixedPasses: tl.fixedPasses,
                 outcomes: tl.segs.filter(function (s) { return s.outcome; }).map(function (s) { return s.i + ':' + s.kind + ':' + s.outcome; }),
                 goals: tl.segs.filter(function (s) { return s.goalS != null; }).map(function (s) { return s.i; }),
+                subPauses: tl.segs.filter(function (s) { return s.pause; }).map(function (s) {
+                    var mv = 0; for (var q = s.s0 + 1; q < s.s1; q++) mv = Math.max(mv, Math.hypot((tl.BX[q] - tl.BX[s.s0]) * M_X, (tl.BY[q] - tl.BY[s.s0]) * M_Y));
+                    return s.i + ':' + ((s.s1 - s.s0) * SAMPLE_DT).toFixed(1) + 's:balón ' + mv.toFixed(1) + 'm';
+                }),
                 goalTiming: tl.segs.filter(function (s) { return s.goalS != null; }).map(function (s) { return [s.i, (s.goalS - s.s0) * SAMPLE_DT, (s.pose - s.s0) * SAMPLE_DT, (s.s1 - s.s0) * SAMPLE_DT].map(function (v) { return Math.round(v * 10) / 10; }); }), memKB: Math.round(tl.S * tl.N * 9 / 1024),
                 ballJumps: (function () { var out = []; for (var q = 1; q < tl.S; q++) { var dm = Math.hypot((tl.BX[q] - tl.BX[q - 1]) * M_X, (tl.BY[q] - tl.BY[q - 1]) * M_Y); if (dm > 9) out.push(q + ':' + dm.toFixed(1) + ':' + tl.BS[q - 1] + '>' + tl.BS[q] + '@' + tl.BX[q-1].toFixed(1) + ',' + tl.BY[q-1].toFixed(1) + '>' + tl.BX[q].toFixed(1) + ',' + tl.BY[q].toFixed(1)); } return out; })(),
                 shotless: tl.segs.filter(function (sg) {
