@@ -2115,6 +2115,7 @@
         if (kind === 'lofted' || kind === 'ground' || kind === 'reset') base += Math.min(10, Math.max(0, dist - 20) * 0.2);   // los envíos largos van más fuertes
         var spd = Math.min(36, base * tp);   // tope: ni en «Turbo» el balón salta
         var dur = dist / spd + (kind === 'lofted' ? 0.25 / tp : 0);
+        if (kind === 'shot' || kind === 'over') dur = Math.max(dur, 0.32);   // un remate siempre se ve salir
         var lo = ball.owner && playerState[ball.owner];
         ball.lastSide = lo ? lo.side : (simulating ? simAttackSide : ball.lastSide);
         ball.goalNet = false;
@@ -3181,6 +3182,13 @@
         var mates = Object.keys(cel.players).filter(function (k) { return k.split(':')[0] === scorerSide; });
         if (!scorer) scorer = mates.slice().sort(function (a, b) { return ptAtt(cel.players[b].x, scorerSide) - ptAtt(cel.players[a].x, scorerSide); })[0];
         if (!scorer) return;
+        // El último pase va al goleador: está donde llega el balón y remata él.
+        if (play.kind === 'goal' && shotPh && shotPh.ballPath && shotPh.ballPath.length > 1) {
+            var sp0 = shotPh.ballPath[0], back = scorerSide === 'home' ? -0.6 : 0.6;
+            [phases[ci - 2], shotPh].forEach(function (q) {
+                if (q && q.players && q.players[scorer] && q.pose !== false) q.players[scorer] = { x: sp0.x + back, y: sp0.y };
+            });
+        }
         var c = cel.players[scorer];
         c = { x: clamp(c.x, 6, 94), y: clamp(c.y, 10, 90) };
         cel.players[scorer] = c;
@@ -3672,7 +3680,7 @@
             if (motor.phaseT >= motor.phaseDur && !busy) startMotorPhase(motor.phases.length ? motor.phases.shift() : null);
             else if (motor.phaseT > motor.phaseDur + 4) { motor.actions = []; motor.action = null; startMotorPhase(motor.phases.length ? motor.phases.shift() : null); }
         } else if (ctx.search) simHolderSearch(now, ctx.attack);
-        if (!motor.phase && !simRestart && !ctx.frozen && ball.state === 'free' && !ball.lock && !ball.goalNet) simChaseLoose();
+        if (!simRestart && !ctx.frozen && ball.state === 'free' && !ball.lock && !ball.goalNet && (!motor.phase || (!motor.action && !motor.actions.length))) simChaseLoose();
         var allowIdle = !simRestart && (!motor.phase || motor.phaseT > motor.phaseDur * 0.9);
         Object.keys(playerState).forEach(function (k) {
             var st = playerState[k];
@@ -3812,7 +3820,7 @@
                         // Gol: la jugada llega pronto al remate y queda tiempo para celebrarlo y sacar de centro.
                         var preSum = 0, postSum = 0;
                         phases.forEach(function (q, qi) { if (qi < celI) preSum += (q.ms || 700); else if (q.pose !== true) postSum += (q.ms || 700); });
-                        var preT = T * 0.36, celT = T * 0.4, kickT = T * 0.12;
+                        var preT = T * 0.3, celT = T * 0.44, kickT = T * 0.12;
                         phases.forEach(function (q, qi) {
                             if (qi < celI) q.ms = (q.ms || 700) * preT * 1000 / Math.max(1, preSum);
                             else if (q.pose === true) q.ms = celT * 1000;
@@ -3907,6 +3915,7 @@
                 seg.sadEnd = sadEnd != null ? sadEnd : (goalS != null ? Math.min(ns, goalS + Math.round(4 / SAMPLE_DT)) : null);
                 seg.scorerSide = play.kind === 'goal' ? plan.info.attack : (play.kind === 'own-goal' ? (plan.info.attack === 'home' ? 'away' : 'home') : null);
                 seg.bench = h.bench; seg.out = h.out;
+                if (goalS != null && !simEvents.some(function (e) { return e.type === 'kickoff' && e.s >= goalS; })) simEvents.push({ s: Math.max(goalS, ns - 2), type: 'kickoff', x: 50, y: 50 });
                 segs.push(seg);
             });
             // Final: todos se retiran por el túnel.
