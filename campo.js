@@ -41,7 +41,8 @@
     var numbers = new Map();
     var nextNumber = { home: 1, away: 1 };
     var numberedMatch = '';
-    var ball = { x: 50, y: 50 };
+    var ball = { x: 50, y: 50, h: 0, state: 'free', owner: null };
+    var ballShadowEl = null;
     var lastKind = 'play';
     var lastPlayIndex = -1;
     var parsedPlays = [];
@@ -49,6 +50,7 @@
     var lastMatchId = '';
     var refreshing = false;
     var dragging = false;
+    var keepViewOnReset = false;
     var built = false;
     var sliderPausedByUs = false;
     var playerState = {};
@@ -722,6 +724,8 @@
         playersLayer = svgEl('g', { 'class': 'campo-players' });
         svg.appendChild(playersLayer);
 
+        ballShadowEl = svgEl('ellipse', { 'class': 'campo-ball-shadow', rx: 9, ry: 4, fill: '#000', opacity: 0, cx: 0, cy: 0 });
+        svg.appendChild(ballShadowEl);
         var ballG = svgEl('g', { 'class': 'campo-ball', filter: 'url(#campo-shadow)' });
         ballG.appendChild(svgEl('circle', { r: 9, fill: '#f4f4f4', stroke: '#222', 'stroke-width': 1.5, cx: 0, cy: 0 }));
         ballG.appendChild(svgEl('path', {
@@ -1920,32 +1924,386 @@
         return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     }
 
-    function posOnPath(path, t) {
-        if (!path || !path.length) return { x: ball.x, y: ball.y };
-        if (path.length === 1 || t <= 0) return { x: path[0].x, y: path[0].y };
-        if (t >= 1) return { x: path[path.length - 1].x, y: path[path.length - 1].y };
-        var i, d, lens = [], total = 0;
-        for (i = 1; i < path.length; i++) {
-            d = Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y);
-            lens.push(Math.max(d, 0.05));
-            total += Math.max(d, 0.05);
-        }
-        var dist = t * total;
-        for (i = 0; i < lens.length; i++) {
-            if (dist <= lens[i] + 0.0001) {
-                var u = dist / lens[i];
-                return { x: lerp(path[i].x, path[i + 1].x, u), y: lerp(path[i].y, path[i + 1].y, u) };
+    /* ================= Motor de movimiento continuo (sesiones 8-9) =================
+       Estilo Championship Manager 2002/03: cada jugador, el árbitro y el balón tienen posición y
+       velocidad propias y se mueven en cada fotograma (requestAnimationFrame) hacia su objetivo,
+       acelerando y frenando. Nadie salta de sitio: si llega una jugada nueva a mitad de otra,
+       cada uno cambia de rumbo desde donde está. El balón siempre está pegado al pie de alguien
+       o viajando entre dos puntos (pase raso, pase bombeado, conducción o tiro).
+       Solo el deslizador coloca el estado exacto de una jugada al instante. */
+    var M_X = 1.05, M_Y = 0.68;                  // metros por cada 1 % de ancho / alto
+    var SPD_MIN = 1.3, SPD_MAX = 9.2;            // m/s (andar ... esprintar), a tempo 1
+    var BALL_SPEED = { ground: 15, lofted: 13, shot: 27, carry: 0, reset: 11 };
+    var motor = {
+        raf: 0, last: 0, running: false,
+        phases: [], phase: null, phaseT: 0, phaseDur: 1,
+        actions: [], action: null, actionT: 0,
+        scale: 1, frame: 0, seekFrame: -1,
+        stats: { plays: 0, cut: 0, droppedPhases: 0 }
+    };
+
+    function lineMs() {
+        var sel = $('speedSelect');
+        var v = sel ? parseInt(sel.value, 10) : 2000;
+        return v > 0 ? v : 2000;
+    }
+
+    // Tempo: a más velocidad de narración, más rápido se mueve todo (para no quedarse atrás).
+    function tempo() {
+        return clamp(2000 / lineMs(), 0.55, 4);
+    }
+
+    function mDist(ax, ay, bx, by) {
+        return Math.hypot((bx - ax) * M_X, (by - ay) * M_Y);
+    }
+
+    function allMovers() {
+        var arr = Object.keys(playerState).map(function (k) { return playerState[k]; });
+        return arr;
+    }
+
+    function setMoverTarget(st, tx, ty, durSec) {
+        st.tx = tx; st.ty = ty; st.hx = tx; st.hy = ty;
+        var d = mDist(st.x, st.y, tx, ty);
+        // Velocidad para llegar en ~75 % de la fase: andando, trotando o esprintando según haga falta.
+        st.spd = clamp(d / Math.max(0.4, durSec * 0.6), SPD_MIN, SPD_MAX);
+        st.idleAt = performance.now() + 900 + Math.random() * 1600;
+    }
+
+    function stepMover(st, dt, tp) {
+        if (st.vx == null) { st.vx = 0; st.vy = 0; }
+        if (st.tx == null) { st.tx = st.x; st.ty = st.y; }
+        var dx = (st.tx - st.x) * M_X, dy = (st.ty - st.y) * M_Y;
+        var d = Math.hypot(dx, dy);
+        var maxS = (st.spd || 3) * tp;
+        var dec = 6.5 * tp;
+        var want = d < 0.03 ? 0 : Math.min(maxS, Math.sqrt(2 * dec * d));
+        var wx = d > 0 ? dx / d * want : 0, wy = d > 0 ? dy / d * want : 0;
+        // Aceleración limitada: arranca y frena de forma progresiva.
+        var acc = 11 * tp * dt;
+        var ax = wx - st.vx, ay = wy - st.vy, al = Math.hypot(ax, ay);
+        if (al > acc) { ax = ax / al * acc; ay = ay / al * acc; }
+        st.vx += ax; st.vy += ay;
+        st.x = clamp(st.x + st.vx * dt / M_X, -6, 106);
+        st.y = clamp(st.y + st.vy * dt / M_Y, -12, 112);
+        return d;
+    }
+
+    // Pequeños movimientos de espera: nadie se queda como una estatua mientras la jugada sigue.
+    function idleWander(st, now, d) {
+        if (st.hx == null || d > 0.6 || now < (st.idleAt || 0)) return;
+        var r = st.pos === 'GK' ? 0.6 : 1.6;
+        var a = Math.random() * Math.PI * 2, m = Math.random() * r;
+        st.tx = clamp(st.hx + Math.cos(a) * m / M_X, 1, 99);
+        st.ty = clamp(st.hy + Math.sin(a) * m / M_Y, 2, 98);
+        st.spd = 1.2 + Math.random() * 0.8;
+        st.idleAt = now + 1300 + Math.random() * 2200;
+    }
+
+    function holderOf(key) {
+        return key ? playerState[key] || null : null;
+    }
+
+    function nearestPlayerTo(x, y, maxM, fromTargets) {
+        var best = null, bd = maxM;
+        Object.keys(playerState).forEach(function (k) {
+            var st = playerState[k];
+            var px = fromTargets ? (st.tx != null ? st.tx : st.x) : st.x;
+            var py = fromTargets ? (st.ty != null ? st.ty : st.y) : st.y;
+            var dd = mDist(px, py, x, y);
+            if (dd < bd) { bd = dd; best = k; }
+        });
+        return best;
+    }
+
+    function isGoalPoint(pt) {
+        return pt && (pt.x <= 3.5 || pt.x >= 96.5) && Math.abs(pt.y - 50) < 9;
+    }
+
+    // Traduce la ruta de balón de una fase (puntos) en acciones: conducir, pasar, chutar.
+    function buildBallActions(ph) {
+        var path = (ph.ballPath || []).slice();
+        var targets = ph.players || {};
+        var nodes = path.map(function (pt) {
+            var best = null, bd = 2.8;
+            Object.keys(targets).forEach(function (k) {
+                var t = targets[k];
+                var dd = mDist(t.x, t.y, pt.x, pt.y);
+                if (dd < bd) { bd = dd; best = k; }
+            });
+            return { pt: pt, who: best };
+        });
+        var acts = [];
+        var prevWho = ball.state === 'held' ? ball.owner : null;
+        var prevPt = { x: ball.x, y: ball.y };
+        for (var i = 0; i < nodes.length; i++) {
+            var n = nodes[i];
+            var next = nodes[i + 1];
+            if (!n.who && next && !next.who && !isGoalPoint(n.pt)) continue;   // punto intermedio de una parábola
+            var dist = mDist(prevPt.x, prevPt.y, n.pt.x, n.pt.y);
+            if (n.who && n.who === prevWho) {
+                acts.push({ type: 'carry', who: n.who, pt: n.pt });
+            } else if (n.who) {
+                acts.push({ type: 'pass', to: n.who, pt: n.pt, lofted: dist > 26 || !!(nodes[i - 1] && !nodes[i - 1].who && i > 0 && path.length > 2) });
+            } else if (dist > 0.8 || i === nodes.length - 1) {
+                acts.push({ type: 'kick', pt: n.pt, shot: isGoalPoint(n.pt) || ph.shootout, lofted: !isGoalPoint(n.pt) && (dist > 22 || i > 0 && path.length > 2) });
             }
-            dist -= lens[i];
+            prevWho = n.who || null;
+            prevPt = n.pt;
         }
-        return { x: path[path.length - 1].x, y: path[path.length - 1].y };
+        return acts;
+    }
+
+    function launchBall(to, kind, receiver) {
+        var tp = tempo();
+        var from = { x: ball.x, y: ball.y };
+        var dist = Math.max(0.5, mDist(from.x, from.y, to.x, to.y));
+        var spd = Math.min(36, (BALL_SPEED[kind] || 14) * tp);   // tope: ni en «Turbo» el balón salta
+        var dur = dist / spd + (kind === 'lofted' ? 0.25 / tp : 0);
+        ball.state = 'flight';
+        ball.owner = null;
+        ball.lock = false;
+        ball.fl = { from: from, to: { x: to.x, y: to.y }, t: 0, dur: dur, kind: kind, H: kind === 'lofted' ? clamp(dist / 30, 0.35, 1.1) : (kind === 'reset' ? 0.5 : 0), receiver: receiver || null };
+    }
+
+    function startAction(a) {
+        motor.action = a;
+        motor.actionT = 0;
+        if (!a) return;
+        a.launched = false;
+    }
+
+    function stepAction(dt) {
+        var a = motor.action;
+        if (!a) {
+            if (motor.actions.length) startAction(motor.actions.shift());
+            return;
+        }
+        motor.actionT += dt;
+        var tp = tempo();
+        if (a.type === 'carry') {
+            var who = holderOf(a.who);
+            if (!who) { startAction(null); return; }
+            if (ball.state !== 'held' || ball.owner !== a.who) {
+                // El balón no lo tiene él: si está cerca lo controla; si no, se lo pasan.
+                if (ball.state !== 'flight' && mDist(ball.x, ball.y, who.x, who.y) < 2.2) { ball.state = 'held'; ball.owner = a.who; }
+                else if (ball.state !== 'flight') { launchBall({ x: who.tx, y: who.ty }, 'ground', a.who); }
+            }
+            var dd = mDist(who.x, who.y, who.tx, who.ty);
+            if ((ball.owner === a.who && dd < 1.4) || motor.actionT > 3.2 / tp) startAction(null);
+            return;
+        }
+        if (!a.launched) {
+            // Preparación breve: el pasador se acomoda antes de soltarla.
+            var owner = holderOf(ball.owner);
+            var ready = !owner || mDist(owner.x, owner.y, owner.tx, owner.ty) < 2.5;
+            if (ball.state === 'flight') return;
+            if ((ready && motor.actionT > 0.12 / tp) || motor.actionT > 0.9 / tp) {
+                var to = a.pt;
+                var recv = a.type === 'pass' ? holderOf(a.to) : null;
+                if (recv) to = { x: recv.tx, y: recv.ty };
+                var kind = a.shot ? 'shot' : (a.lofted ? 'lofted' : 'ground');
+                if (recv && owner && recv.side !== owner.side) kind = recv.pos === 'GK' ? 'shot' : 'ground';
+                if (ball.lock || (!owner && ball.state === 'free' && mDist(ball.x, ball.y, to.x, to.y) > 20)) kind = kind === 'shot' ? kind : 'reset';
+                launchBall(to, kind, a.type === 'pass' ? a.to : null);
+                if (a.shot && isGoalPoint(to)) ball.fl.net = true;
+                a.launched = true;
+                motor.actionT = 0;
+            }
+            return;
+        }
+        if (ball.state !== 'flight') startAction(null);
+    }
+
+    function stepBall(dt) {
+        if (ball.state === 'flight' && ball.fl) {
+            var f = ball.fl;
+            f.t += dt;
+            var u = clamp(f.t / f.dur, 0, 1);
+            // Pase raso: sale fuerte y se frena por el rozamiento. Bombeado y tiro: velocidad casi constante.
+            var e = f.kind === 'ground' ? 1 - Math.pow(1 - u, 1.6) : u;
+            ball.x = lerp(f.from.x, f.to.x, e);
+            ball.y = lerp(f.from.y, f.to.y, e);
+            ball.h = f.H ? Math.sin(Math.PI * u) * f.H : 0;
+            if (u >= 1) {
+                ball.state = 'free';
+                ball.h = 0;
+                ball.lock = !!f.net;
+                ball.fl = null;
+            }
+            return;
+        }
+        if (ball.state === 'held') {
+            var o = holderOf(ball.owner);
+            if (!o) { ball.state = 'free'; return; }
+            var sp = Math.hypot(o.vx || 0, o.vy || 0);
+            var fx, fy;
+            if (sp > 0.4) { fx = o.vx / sp; fy = o.vy / sp; }
+            else { fx = o.side === 'home' ? 1 : -1; fy = 0; }
+            var tx = o.x + fx * 0.9 / M_X, ty = o.y + fy * 0.9 / M_Y + 0.9 / M_Y * 0.0;
+            var k = Math.min(1, dt * 14);
+            ball.x += (tx - ball.x) * k;
+            ball.y += (ty - ball.y) * k;
+            ball.h = 0;
+            return;
+        }
+        // Balón suelto: lo controla el primero que llega (salvo si está dentro de la red).
+        if (!ball.lock) {
+            var near = nearestPlayerTo(ball.x, ball.y, 1.5, false);
+            if (near) { ball.state = 'held'; ball.owner = near; }
+        }
+    }
+
+    function startMotorPhase(ph) {
+        motor.phase = ph;
+        motor.phaseT = 0;
+        if (!ph) return;
+        var dur = Math.max(0.35, (ph.ms || 700) / 1000 * motor.scale);
+        motor.phaseDur = dur;
+        var targets = ph.players || {};
+        Object.keys(playerState).forEach(function (k) {
+            var st = playerState[k];
+            var t = targets[k];
+            if (t) setMoverTarget(st, t.x, t.y, dur);
+        });
+        if (ph.ref) {
+            refState.tx = ph.ref.x; refState.ty = ph.ref.y; refState.hx = ph.ref.x; refState.hy = ph.ref.y;
+            refState.spd = clamp(mDist(refState.x, refState.y, ph.ref.x, ph.ref.y) / Math.max(0.4, dur * 0.8), SPD_MIN, 7.5);
+        }
+        if (ph.highlight) highlightPlayers(ph.highlight);
+        if (ui.caption) ui.caption.classList.toggle('kickoff-on', !!ph.kickoff);
+        motor.actions = buildBallActions(ph);
+        startAction(null);
+    }
+
+    function snapMotorPhase(ph) {
+        if (!ph) return;
+        var targets = ph.players || {};
+        Object.keys(playerState).forEach(function (k) {
+            var st = playerState[k];
+            var t = targets[k];
+            if (!t) return;
+            st.x = t.x; st.y = t.y; st.tx = t.x; st.ty = t.y; st.hx = t.x; st.hy = t.y; st.vx = 0; st.vy = 0;
+            st.idleAt = performance.now() + 600 + Math.random() * 1500;
+            placePlayerEl(st);
+        });
+        if (ph.ref) {
+            refState.x = ph.ref.x; refState.y = ph.ref.y; refState.tx = ph.ref.x; refState.ty = ph.ref.y;
+            refState.hx = ph.ref.x; refState.hy = ph.ref.y; refState.vx = 0; refState.vy = 0;
+            placeRefEl();
+        }
+        var end = (ph.ballPath && ph.ballPath.length) ? ph.ballPath[ph.ballPath.length - 1] : { x: ball.x, y: ball.y };
+        ball.x = end.x; ball.y = end.y; ball.h = 0; ball.fl = null;
+        var near = nearestPlayerTo(end.x, end.y, 2.8, false);
+        if (near && !isGoalPoint(end)) { ball.state = 'held'; ball.owner = near; }
+        else { ball.state = 'free'; ball.owner = null; ball.lock = isGoalPoint(end); }
+        placeBall();
+        if (ph.highlight) highlightPlayers(ph.highlight);
+        if (ui.caption) ui.caption.classList.toggle('kickoff-on', !!ph.kickoff);
+        motor.phase = null;
+        motor.phases = [];
+        motor.actions = [];
+        motor.action = null;
+        motor.seekFrame = motor.frame;
+        window.__seeking = true;   // marca para el medidor de fluidez: este salto es del deslizador
+    }
+
+    function motorTick(now) {
+        motor.raf = requestAnimationFrame(motorTick);
+        var dt = motor.last ? (now - motor.last) / 1000 : 0.016;
+        motor.last = now;
+        if (document.hidden || !built) return;
+        if (window.__seeking && motor.frame > motor.seekFrame) window.__seeking = false;
+        dt = clamp(dt, 0, 0.05);
+        motor.frame++;
+        var tp = tempo();
+        // Fase actual: cuando termina (tiempo cumplido y balón entregado) empieza la siguiente.
+        if (motor.phase) {
+            motor.phaseT += dt;
+            stepAction(dt);
+            var ballBusy = motor.action || motor.actions.length || ball.state === 'flight';
+            if (motor.phaseT >= motor.phaseDur && !ballBusy) {
+                startMotorPhase(motor.phases.length ? motor.phases.shift() : null);
+            } else if (motor.phaseT > motor.phaseDur + 4 / tp) {
+                motor.actions = []; motor.action = null;
+                startMotorPhase(motor.phases.length ? motor.phases.shift() : null);
+            }
+        }
+        var allowIdle = !motor.phase || motor.phaseT > motor.phaseDur * 0.9;
+        Object.keys(playerState).forEach(function (k) {
+            var st = playerState[k];
+            if (st.x == null) return;
+            var d = stepMover(st, dt, tp);
+            if (allowIdle && !(motor.phase && motor.phase.pose)) idleWander(st, now, d);
+            placePlayerEl(st);
+        });
+        if (refState.el) {
+            stepMover(refState, dt, tp);
+            placeRefEl();
+        }
+        stepBall(dt);
+        placeBall();
+    }
+
+    function ensureMotor() {
+        if (motor.running) return;
+        motor.running = true;
+        motor.last = 0;
+        motor.raf = requestAnimationFrame(motorTick);
+    }
+
+    // Compatibilidad: inicia una fase (animada) o la coloca al instante.
+    function startPhase(phase, immediate) {
+        ensureMotor();
+        if (immediate) snapMotorPhase(phase);
+        else { motor.phases = []; startMotorPhase(phase); }
+    }
+
+    function playLines(play) {
+        if (!play) return 3;
+        if (play.lines && play.lines.length) return play.lines.length;
+        if (!play.text) return 3;
+        return Math.max(1, String(play.text).split('\n').filter(function (l) { return l.trim(); }).length);
+    }
+
+    function playResolved(play, d, immediate) {
+        ensureMotor();
+        var resolved = resolvePlay(play, d);
+        var phases = resolved.phases || [];
+        if (!phases.length) return;
+        if (immediate) {
+            // Deslizador: estado exacto de la pose característica (celebración, llegada...), al instante.
+            var pose = null;
+            for (var pi = phases.length - 1; pi >= 0; pi--) {
+                if (phases[pi].pose !== false) { pose = phases[pi]; break; }
+            }
+            snapMotorPhase(pose || phases[phases.length - 1]);
+            return;
+        }
+        // Repartir las fases a lo largo de lo que dura la narración de la jugada.
+        var avail = playLines(play) * lineMs() / 1000 * 0.75;
+        var sum = phases.reduce(function (a, p) { return a + (p.ms || 700) / 1000; }, 0);
+        motor.scale = clamp(avail / Math.max(0.3, sum), 0.6, 4.5);
+        motor.stats.plays++;
+        if (motor.phases.length || motor.phase) motor.stats.cut++;
+        motor.stats.droppedPhases += motor.phases.length;
+        motor.phases = phases.slice(1);
+        startMotorPhase(phases[0]);
     }
 
     function placeBall() {
         if (!ballEl) return;
         var p = toSvg(ball.x, ball.y);
         var bk = 1 + (nodeScale - 1) * 0.8;
-        ballEl.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')' + (bk !== 1 ? ' scale(' + bk.toFixed(3) + ')' : ''));
+        var h = ball.h || 0;
+        // Balón bombeado: sube (se dibuja más arriba y más grande) y su sombra queda en el suelo.
+        var lift = h * 26 * bk;
+        var sc = bk * (1 + h * 0.45);
+        ballEl.setAttribute('transform', 'translate(' + p.x.toFixed(2) + ',' + (p.y - lift).toFixed(2) + ')' + (sc !== 1 ? ' scale(' + sc.toFixed(3) + ')' : ''));
+        if (ballShadowEl) {
+            ballShadowEl.setAttribute('transform', 'translate(' + p.x.toFixed(2) + ',' + (p.y + 6 * bk).toFixed(2) + ') scale(' + (bk * (1 - h * 0.35)).toFixed(3) + ')');
+            ballShadowEl.setAttribute('opacity', h > 0.02 ? (0.45 - h * 0.15).toFixed(2) : '0');
+        }
     }
 
     function placeRefEl() {
@@ -1997,103 +2355,6 @@
         if (!st || !st.el) return;
         var p = toSvg(st.x, st.y);
         st.el.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')' + (nodeScale !== 1 ? ' scale(' + nodeScale.toFixed(3) + ')' : ''));
-    }
-
-    function applyPlayerTargets(targets, t) {
-        Object.keys(playerState).forEach(function (k) {
-            var st = playerState[k];
-            var from = anim.fromPlayers[k] || { x: st.x, y: st.y };
-            var to = (targets && targets[k]) || { x: st.x, y: st.y };
-            st.x = lerp(from.x, to.x, t);
-            st.y = lerp(from.y, to.y, t);
-            placePlayerEl(st);
-        });
-    }
-
-    function startPhase(phase, immediate) {
-        if (!phase) return;
-        var from = {};
-        Object.keys(playerState).forEach(function (k) {
-            from[k] = { x: playerState[k].x, y: playerState[k].y };
-        });
-        anim.fromPlayers = from;
-        anim.toPlayers = phase.players || {};
-        anim.fromRef = { x: refState.x, y: refState.y };
-        anim.toRef = phase.ref || { x: refState.x, y: refState.y };
-        var path = (phase.ballPath && phase.ballPath.length) ? phase.ballPath.slice() : [{ x: ball.x, y: ball.y }];
-        if (!immediate) path.unshift({ x: ball.x, y: ball.y });
-        anim.ballPath = path;
-        anim.ms = immediate ? 1 : Math.max(180, phase.ms || 700);
-        anim.start = performance.now();
-        anim.running = true;
-        if (phase.highlight) highlightPlayers(phase.highlight);
-        // La etiqueta «Saque de centro» solo se ve mientras dura esa fase.
-        if (ui.caption) ui.caption.classList.toggle('kickoff-on', !!phase.kickoff);
-        if (immediate) {
-            finishPhase();
-            return;
-        }
-        if (anim.raf) cancelAnimationFrame(anim.raf);
-        anim.raf = requestAnimationFrame(tickAnim);
-    }
-
-    function finishPhase() {
-        applyPlayerTargets(anim.toPlayers, 1);
-        if (anim.toRef) {
-            refState.x = anim.toRef.x;
-            refState.y = anim.toRef.y;
-            placeRefEl();
-        }
-        if (anim.ballPath.length) {
-            var end = anim.ballPath[anim.ballPath.length - 1];
-            ball = { x: end.x, y: end.y };
-            placeBall();
-        }
-        if (anim.queue.length) {
-            startPhase(anim.queue.shift(), false);
-        } else {
-            anim.running = false;
-        }
-    }
-
-    function tickAnim(now) {
-        var t = (now - anim.start) / anim.ms;
-        if (t >= 1) {
-            finishPhase();
-            return;
-        }
-        var e = easeInOutCubic(t);
-        applyPlayerTargets(anim.toPlayers, e);
-        if (anim.toRef) {
-            var fr = anim.fromRef || { x: refState.x, y: refState.y };
-            refState.x = lerp(fr.x, anim.toRef.x, e);
-            refState.y = lerp(fr.y, anim.toRef.y, e);
-            placeRefEl();
-        }
-        var bp = posOnPath(anim.ballPath, e);
-        ball = { x: bp.x, y: bp.y };
-        placeBall();
-        anim.raf = requestAnimationFrame(tickAnim);
-    }
-
-    function playResolved(play, d, immediate) {
-        var resolved = resolvePlay(play, d);
-        var phases = resolved.phases || [];
-        if (!phases.length) return;
-        if (anim.raf) cancelAnimationFrame(anim.raf);
-        anim.queue = [];
-        if (immediate) {
-            // Saltar a la pose característica (celebración, no la vuelta al centro).
-            var pose = null;
-            for (var pi = phases.length - 1; pi >= 0; pi--) {
-                if (phases[pi].pose !== false) { pose = phases[pi]; break; }
-            }
-            startPhase(pose || phases[phases.length - 1], true);
-            return;
-        }
-        var first = phases.shift();
-        anim.queue = phases;
-        startPhase(first, false);
     }
 
     /* ---------------- UI ---------------- */
@@ -2287,6 +2548,7 @@
         if (!play) return;
         lastPlayIndex = play.i;
         if (typeof window.seekSimulationTo !== 'function') return;
+        keepViewOnReset = true;
         if (play.kind === 'shootout' || play.kind === 'shootout-kick') {
             window.seekSimulationTo('tanda', null, play.endLine);
         } else {
@@ -2374,7 +2636,7 @@
             live[k] = true;
             var st = playerState[k];
             if (!st) {
-                st = { name: p.name, side: p.side, pos: p.pos, baseX: p.x, baseY: p.y, x: p.x, y: p.y, el: null };
+                st = { name: p.name, side: p.side, pos: p.pos, baseX: p.x, baseY: p.y, x: p.x, y: p.y, vx: 0, vy: 0, tx: p.x, ty: p.y, el: null };
                 playerState[k] = st;
             } else {
                 st.pos = p.pos;
@@ -2657,13 +2919,19 @@
             ensureUI();
         }
         if (dragging) return;
+        // Durante un salto del deslizador la narración avanza a toda velocidad hasta la jugada elegida:
+        // el campo ya muestra esa jugada (colocada al soltar), así que no se anima el avance rápido.
+        if (d.seeking) return;
+        keepViewOnReset = false;
         var play = currentPlay(d);
         renderPlayers(d, play);
         updateChrome(d, play);
         setCaption(play, d);
         if (play && play.i !== lastPlayIndex) {
             // -2 = estábamos en el saque inicial: la primera jugada se anima (con su saque de centro).
-            var jump = lastPlayIndex === -1 || (lastPlayIndex >= 0 && Math.abs(play.i - lastPlayIndex) > 3) || (lastPlayIndex === -2 && play.i > 3);
+            // En directo nunca se salta: todo fluye desde donde está. Solo se coloca al instante
+            // al cargar el partido o si se reanuda muy lejos (p. ej. tras «Ir al final»).
+            var jump = lastPlayIndex === -1 || (d.finished && Math.abs(play.i - lastPlayIndex) > 3) || (lastPlayIndex === -2 && play.i > 3);
             playResolved(play, d, jump);
             lastPlayIndex = play.i;
         } else if (!play && lastPlayIndex !== -2) {
@@ -2673,6 +2941,12 @@
     }
 
     function resetView() {
+        if (keepViewOnReset) {
+            // Reinicio provocado por el deslizador (salto a una jugada): el campo ya muestra esa jugada,
+            // así que se conserva todo para que no parpadee ni salte al terminar el avance rápido.
+            keepViewOnReset = false;
+            return;
+        }
         lastSignature = '';
         lastPlayIndex = -1;
         lastPlaysSource = '';
@@ -2681,10 +2955,8 @@
         playerState = {};
         if (refState.el && refState.el.parentNode) refState.el.parentNode.removeChild(refState.el);
         refState = { x: 53, y: 62, el: null, name: '' };
-        if (anim.raf) cancelAnimationFrame(anim.raf);
-        anim.running = false;
-        anim.queue = [];
-        ball = { x: 50, y: 50 };
+        motor.phases = []; motor.phase = null; motor.actions = []; motor.action = null;
+        ball = { x: 50, y: 50, h: 0, state: 'free', owner: null };
         if (playersLayer) playersLayer.innerHTML = '';
         if (built) placeBall();
     }
@@ -2734,8 +3006,6 @@
             setCaption(play, d);
             var r = resolvePlay(play, d);
             var ph = (r.phases || [])[k == null ? 0 : k];
-            if (anim.raf) cancelAnimationFrame(anim.raf);
-            anim.queue = [];
             if (ph) startPhase(ph, true);
             if (ph && ph.highlight) highlightPlayers(ph.highlight);
             return !!ph;
@@ -2748,6 +3018,17 @@
             return (r.phases || []).map(function (ph) {
                 return { ms: ph.ms, pose: ph.pose, kickoff: !!ph.kickoff, ball: ph.ballPath, players: ph.players, ref: ph.ref };
             });
+        },
+        debugMotor: function () {
+            var lag = 0, n = 0;
+            Object.keys(playerState).forEach(function (k) {
+                var st = playerState[k];
+                if (st.hx == null) return;
+                lag += mDist(st.x, st.y, st.hx, st.hy); n++;
+            });
+            return { ball: { x: ball.x, y: ball.y, h: ball.h, state: ball.state, owner: ball.owner, lock: !!ball.lock },
+                phase: !!motor.phase, phaseT: motor.phaseT, phaseDur: motor.phaseDur, queued: motor.phases.length,
+                actions: motor.actions.length + (motor.action ? 1 : 0), scale: motor.scale, lagM: n ? lag / n : 0, frame: motor.frame, stats: motor.stats };
         },
         debugPlays: function () {
             var d = data();
