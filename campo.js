@@ -3390,7 +3390,7 @@
                 var base = ns * N;
                 figs.forEach(function (f, i) {
                     var o = null, flag = 0;
-                    if (f.type === 'player') { o = playerState[f.key] || simLeavers[f.key]; if (o) flag = o.down || (o.leaving === 'red' ? 3 : 0); }
+                    if (f.type === 'player') { o = playerState[f.key] || simLeavers[f.key]; if (o) flag = o.down || (o.leaving === 'red' ? 3 : (!playerState[f.key] && o.leaving === 'sub' ? 4 : 0)); }
                     else if (f.type === 'ref') o = refState;
                     else { var so = simStaff[f.type === 'stretcher' ? 2 : (f.key === 'MED1' ? 0 : 1)]; o = so.on ? so : null; }
                     if (o) { var v = simVisOf(o.x, o.y); X[base + i] = v.x; Y[base + i] = v.y; V[base + i] = 1; F[base + i] = flag; }
@@ -3605,6 +3605,10 @@
             pb.s = seg.pose;
             pb.off.fill(0); pb.boff = [0, 0];
             pb.snap = true;
+            // Con el deslizador se ve la alineación de ese momento: quien ya se va (cambio o roja) no aparece.
+            pb.hidden = {};
+            var kS = Math.floor(seg.pose);
+            for (var hi2 = 0; hi2 < tl.N; hi2++) { var fS = tl.F[kS * tl.N + hi2]; if (fS === 3 || fS === 4) pb.hidden[hi2] = true; }
             window.__seeking = true; motor.seekFrame = motor.frame;
         } else {
             // La línea de tiempo es continua: si la narración va por delante, la reproducción acelera
@@ -3676,6 +3680,7 @@
         for (var i = 0; i < N; i++) {
             var node = tlNodes[i];
             var vis = tl.V[k * N + i] === 1;
+            if (vis && pb.hidden && pb.hidden[i]) { var fH = tl.F[k * N + i]; if (fH === 3 || fH === 4) vis = false; else delete pb.hidden[i]; }
             if (vis !== node.shown) { node.el.style.display = vis ? '' : 'none'; node.shown = vis; if (!vis) { pb.off[i * 2] = 0; pb.off[i * 2 + 1] = 0; } }
             if (!vis) continue;
             var x = tlSample(tl.X, N, i, s, lo, hi), y = tlSample(tl.Y, N, i, s, lo, hi);
