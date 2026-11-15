@@ -5116,7 +5116,7 @@
             pb.seg = sg; pb.s = s; pb.lastS = s; pb.snap = true; pb.fadeSt = null; pb.fadeOff = 0;
             if (pb.off) for (var q = 0; q < pb.off.length; q++) pb.off[q] = 0;
             pb.boff = [0, 0];
-            if (tags !== false) (tl.events || []).forEach(function (e) { if (e.s <= s && e.s > s - 9) showTag(e); });
+            if (tags !== false) (tl.events || []).forEach(function (e) { if (e.s <= s && e.s > s - 15) showTag(e); });
             tlFrame(0);
             return { seg: sg.i, kind: sg.kind };
         },
