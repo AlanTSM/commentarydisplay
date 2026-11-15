@@ -329,3 +329,15 @@ html.campo-noscroll, html.campo-noscroll body { overflow: hidden; }
 /* Sesión 14: gesto del VAR (el árbitro dibuja la pantalla) */
 .campo-var-tv { stroke-dasharray: 150; stroke-dashoffset: 150; animation: campo-var-draw 0.9s ease-out forwards; }
 @keyframes campo-var-draw { to { stroke-dashoffset: 0; } }
+
+/* S15: saques, linieres, protestas, rótulos */
+.campo-arms, .campo-bubble { display: none; }
+.campo-throwing .campo-arms { display: inline; }
+.campo-protest .campo-bubble { display: inline; animation: campo-protest-shake 0.45s ease-in-out infinite alternate; }
+@keyframes campo-protest-shake { from { transform: translate(13px, -24px) rotate(-12deg); } to { transform: translate(17px, -27px) rotate(12deg); } }
+.campo-ar .campo-ar-flag { transform: rotate(60deg); transform-origin: 9px 4px; transition: transform 0.25s; }
+.campo-ar.campo-flag-up .campo-ar-flag { transform: translate(-2px, -10px) rotate(0deg); }
+.campo-ar.campo-flag-up .campo-ar-flag rect { animation: campo-flag-wave 0.3s ease-in-out infinite alternate; }
+@keyframes campo-flag-wave { from { transform: skewY(-8deg); } to { transform: skewY(8deg); } }
+.campo-tag { pointer-events: none; animation: campo-tag-in 1.9s ease-out forwards; }
+@keyframes campo-tag-in { 0% { opacity: 0; } 12% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
