@@ -246,6 +246,8 @@
 
     function classify(text) {
         var s = String(text || '').toLowerCase();
+        // «ocasión manifiesta de gol», «dedica el gol al banquillo»... no son un gol de esta jugada.
+        s = s.replace(/ocasi[oó]n (?:manifiesta )?de gol|posible gol|dedica el gol|celebra el gol|tras el gol/g, ' ');
         if (/autogol|propia puerta/.test(s)) return 'own-goal';
         // Evitar falsos positivos como "Golpea las vallas".
         if (/¡+gol|go{3,}l|(?:^|[^\wáéíóúñ])¡?gol(?:es)?\b/i.test(s)) return 'goal';
@@ -717,9 +719,22 @@
         svg.appendChild(goals);
 
         var labels = svgEl('g', { fill: 'rgba(255,255,255,0.45)', 'font-size': '14', 'font-family': 'Segoe UI, sans-serif', 'text-anchor': 'middle' });
-        labels.appendChild(textAt(x + 80, y + 22, 'Local'));
-        labels.appendChild(textAt(x + w - 80, y + 22, 'Visitante'));
+        var lblL = textAt(x + 80, y + 22, ends.flipped ? 'Visitante' : 'Local');
+        var lblR = textAt(x + w - 80, y + 22, ends.flipped ? 'Local' : 'Visitante');
+        labels.appendChild(lblL);
+        labels.appendChild(lblR);
+        ends.labels = [lblL, lblR];
         svg.appendChild(labels);
+
+        // Fuera del campo (banda de abajo): banquillos, entrenadores y asistencias.
+        offLayer = svgEl('g', { 'class': 'campo-off' });
+        benchLayer = svgEl('g', { 'class': 'campo-benches' });
+        staffLayer = svgEl('g', { 'class': 'campo-staff-layer' });
+        offLayer.appendChild(benchLayer);
+        offLayer.appendChild(staffLayer);
+        svg.appendChild(offLayer);
+        benchSig = '';
+        managers = { home: null, away: null };
 
         playersLayer = svgEl('g', { 'class': 'campo-players' });
         svg.appendChild(playersLayer);
@@ -1563,8 +1578,12 @@
     }
 
     function effectiveLineups(d, play) {
-        var home = (d.homeStarters || []).map(copyPlayer);
-        var away = (d.awayStarters || []).map(copyPlayer);
+        // Los expulsados ya no están en el campo (en directo se van andando a vestuarios).
+        var red = {};
+        (d.redCarded || []).forEach(function (n) { red[n] = true; });
+        function onPitch(p) { return p && !red[p.name]; }
+        var home = (d.homeStarters || []).filter(onPitch).map(copyPlayer);
+        var away = (d.awayStarters || []).filter(onPitch).map(copyPlayer);
         if (!play || (play.kind !== 'shootout' && play.kind !== 'shootout-kick')) {
             return { home: home, away: away };
         }
@@ -2189,6 +2208,7 @@
             var t = targets[k];
             if (!t) return;
             var inv = involved[k] || involved[st.name];
+            if (st.hold) { st.hx = t.x; st.hy = t.y; return; }   // atendido por las asistencias
             // Vuelta a la posición (tras gol, falta, saque...): se vuelve trotando, sin prisas.
             setMoverTarget(st, t.x, t.y, dur, { involved: inv, jog: ph.pose === false && !ph.kickoff });
         });
@@ -2261,7 +2281,7 @@
             if (st.x == null) return;
             if (st.pend) applyPending(st, now);
             var d = stepMover(st, dt, tp);
-            if (allowIdle && !(motor.phase && motor.phase.pose)) idleWander(st, now, d);
+            if (allowIdle && !st.hold && !(motor.phase && motor.phase.pose)) idleWander(st, now, d);
             placePlayerEl(st);
         });
         if (refState.el) {
@@ -2270,6 +2290,9 @@
         }
         stepBall(dt);
         placeBall();
+        stepLeavers(dt, tp);
+        stepScenes(dt, tp);
+        stepManagers(dt, now);
     }
 
     function ensureMotor() {
@@ -2295,6 +2318,8 @@
 
     function playResolved(play, d, immediate) {
         ensureMotor();
+        setEnds(periodOf(play), immediate);
+        if (immediate) resetStaff();
         var resolved = resolvePlay(play, d);
         var phases = resolved.phases || [];
         if (!phases.length) return;
@@ -2316,11 +2341,12 @@
         motor.stats.droppedPhases += motor.phases.length;
         motor.phases = phases.slice(1);
         startMotorPhase(phases[0]);
+        playEvents(play, d);
     }
 
     function placeBall() {
         if (!ballEl) return;
-        var p = toSvg(ball.x, ball.y);
+        var p = toView(ball.x, ball.y);
         var bk = 1 + (nodeScale - 1) * 0.8;
         var h = ball.h || 0;
         // Balón bombeado: sube (se dibuja más arriba y más grande) y su sombra queda en el suelo.
@@ -2335,7 +2361,7 @@
 
     function placeRefEl() {
         if (!refState || !refState.el) return;
-        var p = toSvg(refState.x, refState.y);
+        var p = toView(refState.x, refState.y);
         refState.el.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')' + (nodeScale !== 1 ? ' scale(' + nodeScale.toFixed(3) + ')' : ''));
     }
 
@@ -2380,8 +2406,492 @@
 
     function placePlayerEl(st) {
         if (!st || !st.el) return;
-        var p = toSvg(st.x, st.y);
+        var p = toView(st.x, st.y);
         st.el.setAttribute('transform', 'translate(' + p.x + ',' + p.y + ')' + (nodeScale !== 1 ? ' scale(' + nodeScale.toFixed(3) + ')' : ''));
+    }
+
+    /* ================= Sesión 10: cambio de campo, banquillos, cambios, expulsiones, lesiones y entrenadores =================
+       Coordenadas: el motor trabaja en coordenadas «lógicas» (el local siempre ataca hacia x=100). Al cambiar de campo
+       (descanso, inicio de la prórroga y su descanso) solo cambia cómo se dibuja: la vista gira 180°. En ese instante
+       el estado lógico se refleja también, de modo que en pantalla nadie se mueve de golpe: los jugadores caminan
+       hacia su nueva mitad. Banquillos, entrenadores y asistencias están fuera del campo, en la banda de abajo, y no
+       giran (los banquillos no cambian de sitio en el descanso). */
+    var ends = { flipped: false, period: 1, labels: null, bannerEl: null };
+    var offLayer = null, benchLayer = null, staffLayer = null;
+    var leavers = {};                     // jugadores que salen del campo (cambio o expulsión)
+    var benchOut = { home: [], away: [] }; // sustituidos que ya se han sentado en el banquillo
+    var scenes = [];                      // escenas en curso (lesión con asistencias y camilla)
+    var managers = { home: null, away: null };
+    var benchSig = '';
+    var BENCH = { home: { x: 30, y: 103.1 }, away: { x: 70, y: 103.1 } };
+    var MANAGER_SPOT = { home: { x: 42.5, y: 102.2 }, away: { x: 57.5, y: 102.2 } };
+
+    function visOf(x, y) { return ends.flipped ? { x: 100 - x, y: 100 - y } : { x: x, y: y }; }
+    function logOf(x, y) { return visOf(x, y); }           // la simetría es su propia inversa
+    function toView(x, y) { var v = visOf(x, y); return toSvg(v.x, v.y); }
+
+    function periodOf(play) {
+        if (!play) return 1;
+        if (play.kind === 'shootout' || play.kind === 'shootout-kick') return ends.period;
+        var m = parseInt(String(play.minute || '').split('+')[0], 10);
+        if (isNaN(m)) return ends.period;
+        if (m <= 45) return 1;
+        if (m <= 90) return 2;
+        if (m <= 105) return 3;
+        return 4;
+    }
+
+    function mirrorObj(o) {
+        if (!o) return;
+        if (o.x != null) { o.x = 100 - o.x; o.y = 100 - o.y; }
+        if (o.tx != null) { o.tx = 100 - o.tx; o.ty = 100 - o.ty; }
+        if (o.hx != null) { o.hx = 100 - o.hx; o.hy = 100 - o.hy; }
+        if (o.vx != null) { o.vx = -o.vx; o.vy = -o.vy; }
+        if (o.pend) { o.pend.tx = 100 - o.pend.tx; o.pend.ty = 100 - o.pend.ty; }
+    }
+
+    function setEnds(period, immediate) {
+        var flip = period % 2 === 0;
+        var changed = flip !== ends.flipped;
+        ends.period = period;
+        if (!changed) return;
+        if (!immediate) {
+            Object.keys(playerState).forEach(function (k) { mirrorObj(playerState[k]); });
+            Object.keys(leavers).forEach(function (k) { mirrorObj(leavers[k]); });
+            mirrorObj(refState);
+            ball.x = 100 - ball.x; ball.y = 100 - ball.y;
+            if (ball.fl) { mirrorObj(ball.fl.from); mirrorObj(ball.fl.to); }
+        }
+        ends.flipped = flip;
+        if (ends.labels) {
+            ends.labels[0].textContent = flip ? 'Visitante' : 'Local';
+            ends.labels[1].textContent = flip ? 'Local' : 'Visitante';
+        }
+        if (!immediate) showBanner(period === 3 ? 'Prórroga · cambio de campo' : 'Cambio de campo');
+    }
+
+    function showBanner(text) {
+        if (!offLayer) return;
+        if (ends.bannerEl && ends.bannerEl.parentNode) ends.bannerEl.parentNode.removeChild(ends.bannerEl);
+        var p = toSvg(50, 8);
+        var g = svgEl('g', { 'class': 'campo-banner', transform: 'translate(' + p.x + ',' + p.y + ')' });
+        g.appendChild(svgEl('rect', { x: -120, y: -17, width: 240, height: 30, rx: 15, fill: 'rgba(10,20,15,0.78)', stroke: 'rgba(255,255,255,0.5)', 'stroke-width': 1.5 }));
+        var t = svgEl('text', { x: 0, y: 4, 'text-anchor': 'middle', fill: '#fff', 'font-size': 15, 'font-weight': 700, 'font-family': 'Segoe UI, sans-serif' });
+        t.textContent = text;
+        g.appendChild(t);
+        offLayer.appendChild(g);
+        ends.bannerEl = g;
+        setTimeout(function () { if (g.parentNode) g.parentNode.removeChild(g); }, 3200);
+    }
+
+    /* ---- Banquillos ---- */
+    function teamColorsOf(side, d) {
+        return (side === 'home' ? d.homeColors : d.awayColors) || { primary: '#333', secondary: '#fff' };
+    }
+
+    function benchNames(side, d) {
+        var subs = ((side === 'home' ? d.homeSubs : d.awaySubs) || []).map(function (p) { return p.name; });
+        var onPitch = {};
+        Object.keys(playerState).forEach(function (k) { onPitch[k] = true; });
+        var list = subs.filter(function (n) { return !onPitch[keyOf(side, n)] && !leavers[keyOf(side, n)]; });
+        benchOut[side].forEach(function (n) { if (list.indexOf(n) === -1 && !onPitch[keyOf(side, n)]) list.push(n); });
+        return list;
+    }
+
+    function drawBenches(d) {
+        if (!benchLayer || !d) return;
+        var data = ['home', 'away'].map(function (side) { return { side: side, names: benchNames(side, d) }; });
+        var sig = JSON.stringify(data) + nodeScale.toFixed(2) + (teamColorsOf('home', d).primary) + (teamColorsOf('away', d).primary);
+        if (sig === benchSig) return;
+        benchSig = sig;
+        benchLayer.innerHTML = '';
+        var k = 1 + (nodeScale - 1) * 0.6;
+        data.forEach(function (b) {
+            var c = toSvg(BENCH[b.side].x, BENCH[b.side].y);
+            var n = Math.max(5, b.names.length);
+            var step = 21 * k;
+            var w = n * step + 12;
+            var g = svgEl('g', { 'class': 'campo-bench', 'data-side': b.side });
+            g.appendChild(svgEl('rect', { x: c.x - w / 2, y: c.y - 12 * k, width: w, height: 24 * k, rx: 6, fill: 'rgba(0,0,0,0.38)', stroke: 'rgba(255,255,255,0.35)', 'stroke-width': 1 }));
+            var kit = kitStyle(teamColorsOf(b.side, d));
+            b.names.forEach(function (name, i) {
+                var x = c.x - (b.names.length - 1) * step / 2 + i * step;
+                var out = benchOut[b.side].indexOf(name) !== -1;
+                var dot = svgEl('g', { 'class': 'campo-bench-player' + (out ? ' is-out' : ''), transform: 'translate(' + x.toFixed(1) + ',' + c.y.toFixed(1) + ') scale(' + k.toFixed(3) + ')', opacity: out ? 0.55 : 1 });
+                var title = svgEl('title', {});
+                title.textContent = name + (out ? ' (sustituido)' : ' (suplente)');
+                dot.appendChild(title);
+                dot.appendChild(svgEl('circle', { r: 8.5, fill: kit.fill, stroke: kit.ring, 'stroke-width': 2 }));
+                var t = svgEl('text', { y: 3.6, 'text-anchor': 'middle', 'font-size': 9.5, 'font-weight': 700, fill: kit.ink, 'font-family': 'Segoe UI, sans-serif' });
+                t.textContent = String(assignNumber(b.side, name));
+                dot.appendChild(t);
+                g.appendChild(dot);
+            });
+            benchLayer.appendChild(g);
+        });
+    }
+
+    function benchSpotLogical(side) {
+        var b = BENCH[side];
+        return logOf(b.x + (side === 'home' ? 6 : -6), 101.5);
+    }
+
+    /* ---- Salidas (cambio o expulsión) y entradas ---- */
+    function startLeaving(k, st, why, force) {
+        var target;
+        if (!force) {
+            // Si las asistencias lo están atendiendo, primero se lo llevan en camilla; luego va al banquillo.
+            var sc = scenes.filter(function (x) { return x.key === k && x.stage < 4; })[0];
+            if (sc) {
+                sc.subbed = why;
+                delete playerState[k];
+                if (ball.owner === k) { ball.state = 'free'; ball.owner = null; }
+                return;
+            }
+        }
+        if (why === 'red') target = logOf(50, 106);          // vestuarios: túnel en el centro de la banda
+        else target = benchSpotLogical(st.side);
+        st.leaving = why;
+        st.pend = null;
+        st.tx = target.x; st.ty = target.y; st.hx = null;
+        st.spd = why === 'red' ? 1.5 : 3;                      // el expulsado se va andando; el cambiado, al trote
+        st.leaveT = 0;
+        if (st.el) {
+            st.el.setAttribute('data-leaving', why);
+            st.el.classList.add('campo-leaving');
+            if (why === 'red') st.el.classList.add('campo-sent-off');
+        }
+        leavers[k] = st;
+        delete playerState[k];
+        if (ball.owner === k) { ball.state = 'free'; ball.owner = null; }
+    }
+
+    function stepLeavers(dt, tp) {
+        Object.keys(leavers).forEach(function (k) {
+            var st = leavers[k];
+            st.leaveT += dt;
+            var d = stepMover(st, dt, Math.min(tp, 2.5));
+            var v = visOf(st.x, st.y);
+            if (st.el && v.y > 100.5) st.el.style.opacity = String(clamp(1 - (v.y - 100.5) / 5, 0, 1).toFixed(2));
+            placePlayerEl(st);
+            if (d < 0.6 || st.leaveT > 25) finishLeaving(k);
+        });
+    }
+
+    function finishLeaving(k) {
+        var st = leavers[k];
+        if (!st) return;
+        if (st.el && st.el.parentNode) st.el.parentNode.removeChild(st.el);
+        if (st.leaving === 'sub' && benchOut[st.side].indexOf(st.name) === -1) benchOut[st.side].push(st.name);
+        delete leavers[k];
+        benchSig = '';
+        var d = data();
+        if (d) drawBenches(d);
+    }
+
+    function clearLeavers() {
+        Object.keys(leavers).forEach(function (k) {
+            var st = leavers[k];
+            if (st.el && st.el.parentNode) st.el.parentNode.removeChild(st.el);
+            if (st.leaving === 'sub' && benchOut[st.side].indexOf(st.name) === -1) benchOut[st.side].push(st.name);
+        });
+        leavers = {};
+        benchSig = '';
+    }
+
+    function leaveReason(st, play, d) {
+        if (d && (d.redCarded || []).indexOf(st.name) !== -1) return 'red';
+        var t = String((play && play.text) || '').toLowerCase();
+        var last = String(st.name || '').toLowerCase().split(' ').pop();
+        if (/tarjeta roja|cartulina roja|ve la roja|la roja|expulsad|segunda amarilla|se marcha/.test(t) && (!last || t.indexOf(last) !== -1 || (play && play.kind === 'red'))) return 'red';
+        return 'sub';
+    }
+
+    /* ---- Lesión: asistencias y camilla ---- */
+    function injuredKey(play) {
+        var text = String((play && play.text) || '');
+        var m = text.match(/([^\n.:;!¡]+?)\s+(?:cae lesionado|se duele|se ha lesionado|está lesionado)/i);
+        var cand = m ? m[1].trim().toLowerCase() : '';
+        var best = null;
+        Object.keys(playerState).forEach(function (k) {
+            var n = String(playerState[k].name || '').toLowerCase();
+            if (!n) return;
+            var last = n.split(' ').pop();
+            if (cand && (cand.indexOf(n) !== -1 || (last.length > 2 && cand.indexOf(last) !== -1))) best = best || k;
+        });
+        if (!best && play && play.players) {
+            play.players.forEach(function (name) {
+                Object.keys(playerState).forEach(function (k) { if (!best && playerState[k].name === name) best = k; });
+            });
+        }
+        return best;
+    }
+
+    function staffNode(kind) {
+        var g = svgEl('g', { 'class': 'campo-staff campo-' + kind });
+        if (kind === 'medic') {
+            g.appendChild(svgEl('circle', { r: 9, fill: '#ffffff', stroke: '#b91c1c', 'stroke-width': 2 }));
+            g.appendChild(svgEl('rect', { x: -1.8, y: -5.5, width: 3.6, height: 11, fill: '#dc2626' }));
+            g.appendChild(svgEl('rect', { x: -5.5, y: -1.8, width: 11, height: 3.6, fill: '#dc2626' }));
+        } else if (kind === 'stretcher') {
+            g.appendChild(svgEl('rect', { x: -22, y: -8, width: 44, height: 16, rx: 4, fill: 'rgba(255,255,255,0.92)', stroke: '#7f1d1d', 'stroke-width': 1.5 }));
+            g.appendChild(svgEl('line', { x1: -27, y1: -6, x2: 27, y2: -6, stroke: '#4b5563', 'stroke-width': 2 }));
+            g.appendChild(svgEl('line', { x1: -27, y1: 6, x2: 27, y2: 6, stroke: '#4b5563', 'stroke-width': 2 }));
+        }
+        return g;
+    }
+
+    function placeStaff(o) {
+        var p = toSvg(o.x, o.y);
+        var k = 1 + (nodeScale - 1) * 0.7;
+        o.el.setAttribute('transform', 'translate(' + p.x.toFixed(1) + ',' + p.y.toFixed(1) + ')' + (o.rot ? ' rotate(' + o.rot + ')' : '') + ' scale(' + k.toFixed(3) + ')');
+    }
+
+    function startInjury(play, d) {
+        var k = injuredKey(play);
+        if (!k || !staffLayer) return;
+        if (scenes.some(function (s) { return s.key === k; })) return;
+        var st = playerState[k];
+        var text = String(play.text || '').toLowerCase();
+        var w = text.match(/lesi[oó]n de (\d+) semana/);
+        var serious = /camilla|no puede seguir|grave|retirado/.test(text) || (w ? parseInt(w[1], 10) >= 2 : /cae lesionado/.test(text));
+        st.hold = true;
+        st.pend = null;
+        st.tx = st.x; st.ty = st.y;
+        if (st.el) st.el.classList.add('campo-down');
+        var v = visOf(st.x, st.y);
+        var bench = BENCH[st.side];
+        var medics = [-1, 1].map(function (s) {
+            var o = { x: bench.x + s * 2, y: 102.2, vx: 0, vy: 0, spd: 5.5, el: staffNode('medic') };
+            o.tx = o.x; o.ty = o.y;
+            staffLayer.appendChild(o.el);
+            placeStaff(o);
+            return o;
+        });
+        scenes.push({ type: 'injury', key: k, st: st, serious: serious, stage: 0, t: 0, medics: medics, stretcher: null, side: st.side });
+    }
+
+    function stepScenes(dt, tp) {
+        var tq = Math.min(tp, 3);
+        scenes = scenes.filter(function (sc) {
+            sc.t += dt;
+            var st = sc.st;
+            var alive = playerState[sc.key] === st || !!sc.subbed;
+            if (!alive && sc.stage < 4) sc.stage = 4;
+            var v = visOf(st.x, st.y);
+            if (sc.stage === 0 && sc.t > 0.6 / tq) {
+                // Las asistencias salen corriendo desde su banquillo hacia el jugador.
+                sc.medics.forEach(function (m, i) { m.tx = clamp(v.x + (i ? 1.6 : -1.6), 1, 99); m.ty = clamp(v.y + 1.2, 1, 99); m.spd = 5.5; });
+                sc.stage = 1; sc.t = 0;
+            } else if (sc.stage === 1) {
+                var arrived = sc.medics.every(function (m) { return mDist(m.x, m.y, m.tx, m.ty) < 0.7; });
+                if (arrived || sc.t > 9 / tq) { sc.stage = 2; sc.t = 0; }
+            } else if (sc.stage === 2 && sc.t > 1.8 / tq) {
+                if (sc.serious) {
+                    // Camilla: se lo llevan hasta la banda, despacio.
+                    sc.stretcher = { x: v.x, y: v.y, vx: 0, vy: 0, el: staffNode('stretcher') };
+                    staffLayer.insertBefore(sc.stretcher.el, staffLayer.firstChild);
+                    var exitX = clamp(v.x, 8, 92);
+                    sc.exit = { x: exitX, y: 101.6 };
+                    sc.stage = 3; sc.t = 0;
+                    if (st.el) st.el.classList.add('campo-on-stretcher');
+                } else {
+                    sc.stage = 4; sc.t = 0;
+                    st.hold = false;
+                    if (st.hx != null) { st.tx = st.hx; st.ty = st.hy; st.spd = 2.5; }
+                    if (st.el) st.el.classList.remove('campo-down');
+                }
+            } else if (sc.stage === 3) {
+                var sp = 1.8 * tq * dt;
+                var dx = (sc.exit.x - v.x) * M_X, dy = (sc.exit.y - v.y) * M_Y, dd = Math.hypot(dx, dy);
+                if (dd > 0.2) {
+                    var nx = v.x + dx / dd * Math.min(sp, dd) / M_X, ny = v.y + dy / dd * Math.min(sp, dd) / M_Y;
+                    var lg = logOf(nx, ny);
+                    st.x = lg.x; st.y = lg.y; st.tx = lg.x; st.ty = lg.y; st.vx = 0; st.vy = 0;
+                    v = { x: nx, y: ny };
+                }
+                placePlayerEl(st);
+                sc.stretcher.x = v.x; sc.stretcher.y = v.y;
+                sc.medics[0].x = sc.medics[0].tx = v.x - 3.2; sc.medics[0].y = sc.medics[0].ty = v.y;
+                sc.medics[1].x = sc.medics[1].tx = v.x + 3.2; sc.medics[1].y = sc.medics[1].ty = v.y;
+                if (dd <= 0.2 || sc.t > 30) {
+                    sc.stage = 4; sc.t = 0;
+                    // Fuera del campo: si no lo sustituyen, vuelve cuando el árbitro lo autoriza.
+                    sc.returnAt = 6 / tq;
+                }
+            } else if (sc.stage === 4) {
+                if (sc.stretcher && sc.stretcher.el) { sc.stretcher.el.remove(); sc.stretcher = null; }
+                if (sc.subbed) {
+                    st.hold = false;
+                    if (st.el) st.el.classList.remove('campo-down');
+                    startLeaving(sc.key, st, sc.subbed, true);
+                    sc.returnAt = 0; sc.subbed = null;
+                }
+                sc.medics.forEach(function (m) { var b = BENCH[sc.side]; m.tx = b.x; m.ty = 102.4; m.spd = 3; });
+                if (st.el) st.el.classList.remove('campo-on-stretcher');
+                sc.stage = 5; sc.t = 0;
+            } else if (sc.stage === 5) {
+                if (sc.returnAt && sc.t > sc.returnAt && playerState[sc.key] === st) {
+                    st.hold = false;
+                    if (st.hx != null) { st.tx = st.hx; st.ty = st.hy; st.spd = 3; }
+                    if (st.el) st.el.classList.remove('campo-down');
+                    sc.returnAt = 0;
+                }
+                var home = sc.medics.every(function (m) { return mDist(m.x, m.y, m.tx, m.ty) < 0.8; });
+                if (home && !sc.returnAt) {
+                    sc.medics.forEach(function (m) { if (m.el) m.el.remove(); });
+                    if (playerState[sc.key] === st && st.hold && !sc.serious) st.hold = false;
+                    return false;
+                }
+            }
+            sc.medics.forEach(function (m) { if (sc.stage !== 3) stepMover(m, dt, tq); placeStaff(m); });
+            if (sc.stretcher) placeStaff(sc.stretcher);
+            return true;
+        });
+    }
+
+    function clearScenes() {
+        scenes.forEach(function (sc) {
+            sc.medics.forEach(function (m) { if (m.el) m.el.remove(); });
+            if (sc.stretcher && sc.stretcher.el) sc.stretcher.el.remove();
+            if (sc.st) { sc.st.hold = false; if (sc.st.el) sc.st.el.classList.remove('campo-down', 'campo-on-stretcher'); }
+        });
+        scenes = [];
+    }
+
+    /* ---- Entrenadores en la banda ---- */
+    function buildManager(side, d) {
+        var kit = kitStyle(teamColorsOf(side, d));
+        var g = svgEl('g', { 'class': 'campo-manager', 'data-side': side });
+        var title = svgEl('title', {});
+        title.textContent = 'Entrenador de ' + ((side === 'home' ? d.homeTeam : d.awayTeam) || '');
+        g.appendChild(title);
+        var body = svgEl('g', { 'class': 'campo-manager-body' });
+        body.appendChild(svgEl('circle', { r: 10.5, fill: '#1f2937', stroke: kit.fill, 'stroke-width': 3 }));
+        var t = svgEl('text', { y: 3.8, 'text-anchor': 'middle', 'font-size': 9.5, 'font-weight': 800, fill: '#fff', 'font-family': 'Segoe UI, sans-serif' });
+        t.textContent = 'DT';
+        body.appendChild(t);
+        g.appendChild(body);
+        var bubble = svgEl('g', { 'class': 'campo-bubble', opacity: 0 });
+        bubble.appendChild(svgEl('rect', { x: -34, y: -40, width: 68, height: 20, rx: 10, fill: '#fff', stroke: 'rgba(0,0,0,0.5)', 'stroke-width': 1 }));
+        bubble.appendChild(svgEl('path', { d: 'M -4 -20.5 L 0 -14 L 4 -20.5 Z', fill: '#fff' }));
+        var bt = svgEl('text', { y: -26, 'text-anchor': 'middle', 'font-size': 11.5, 'font-weight': 700, fill: '#111', 'font-family': 'Segoe UI, sans-serif' });
+        bubble.appendChild(bt);
+        g.appendChild(bubble);
+        staffLayer.appendChild(g);
+        var s = MANAGER_SPOT[side];
+        return { side: side, x: s.x, y: s.y, tx: s.x, ty: s.y, vx: 0, vy: 0, spd: 1.2, el: g, body: body, bubble: bubble, bubbleText: bt, mood: null, moodT: 0, moodDur: 0, idleAt: 0 };
+    }
+
+    function ensureManagers(d) {
+        if (!staffLayer || !d || !d.homeTeam) return;
+        ['home', 'away'].forEach(function (side) {
+            if (!managers[side] || !managers[side].el.parentNode) managers[side] = buildManager(side, d);
+        });
+    }
+
+    var MOODS = {
+        celebrate: { text: '¡Gooool!', dur: 3.2 },
+        despair: { text: '¡No!', dur: 2.6 },
+        protest: { text: '¡Árbitro!', dur: 2.8 },
+        applaud: { text: '¡Bien!', dur: 2.4 },
+        instruct: { text: '¡Arriba!', dur: 2.8 },
+        argue: { text: '¡Eh!', dur: 2.6 },
+        nervous: { text: '¡Vamos!', dur: 2.6 }
+    };
+
+    function setMood(side, mood) {
+        var m = managers[side];
+        if (!m || !MOODS[mood]) return;
+        m.mood = mood; m.moodT = 0; m.moodDur = MOODS[mood].dur;
+        m.bubbleText.textContent = MOODS[mood].text;
+        var s = MANAGER_SPOT[side];
+        // Al protestar, dar instrucciones o celebrar se va hasta la línea; si no, se queda en su zona.
+        if (mood === 'protest' || mood === 'instruct' || mood === 'argue' || mood === 'celebrate') { m.tx = s.x + (side === 'home' ? 2.5 : -2.5); m.ty = 100.9; m.spd = mood === 'celebrate' ? 4 : 2.6; }
+        else if (mood === 'despair') { m.tx = s.x; m.ty = s.y + 0.6; m.spd = 1.2; }
+        else { m.tx = s.x; m.ty = s.y; m.spd = 1.6; }
+    }
+
+    function sideMentioned(text, d) {
+        var t = foldText(text);
+        var h = d.homeTeam ? foldText(d.homeTeam) : '', a = d.awayTeam ? foldText(d.awayTeam) : '';
+        var hi = h ? t.indexOf(h.split(' ')[0]) : -1, ai = a ? t.indexOf(a.split(' ')[0]) : -1;
+        if (hi >= 0 && (ai < 0 || hi < ai)) return 'home';
+        if (ai >= 0) return 'away';
+        return null;
+    }
+
+    function foldText(s) {
+        return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function managerReact(play, d) {
+        if (!play || !managers.home) return;
+        var t = foldText(play.text);
+        var side = sideOfTeam(play.team, d);
+        var other = side === 'home' ? 'away' : side === 'away' ? 'home' : null;
+        var named = sideMentioned(play.text, d) || side;
+        if (play.kind === 'goal' || play.kind === 'own-goal') {
+            var scorer = play.kind === 'own-goal' ? other : side;
+            if (scorer) { setMood(scorer, 'celebrate'); setMood(scorer === 'home' ? 'away' : 'home', 'despair'); }
+            return;
+        }
+        if (/celebra con el cuerpo tecnico|dedica el gol al banquillo|abrazo con el banquillo/.test(t) && side) { setMood(side, 'celebrate'); return; }
+        if (/entrenador .{0,40}aplaude|aplaude desde la banda/.test(t) && named) { setMood(named, 'applaud'); return; }
+        if ((/(entrenador|tecnico|mister).{0,60}(pide|exige|ordena|grita|instrucciones|mas metros|presion)/.test(t) || /empuja desde la banda|presion tras el gol/.test(t)) && named) { setMood(named, 'instruct'); return; }
+        if (/discute con .{0,40}banquillo|protesta|se encara/.test(t) && side) { setMood(side, 'argue'); return; }
+        if (/nervios .{0,30}banquillos/.test(t)) { setMood('home', 'nervous'); setMood('away', 'nervous'); return; }
+        if (play.kind === 'red' || play.kind === 'yellow' || play.kind === 'penalty') {
+            // Protesta el banquillo del que recibe la tarjeta o el penalti en contra.
+            var victim = play.kind === 'penalty' ? other : side;
+            if (victim) setMood(victim, 'protest');
+            return;
+        }
+        if (play.kind === 'sub' && named) setMood(named, 'instruct');
+    }
+
+    function stepManagers(dt, now) {
+        ['home', 'away'].forEach(function (side) {
+            var m = managers[side];
+            if (!m) return;
+            var s = MANAGER_SPOT[side];
+            if (m.mood) {
+                m.moodT += dt;
+                if (m.moodT > m.moodDur) { m.mood = null; m.tx = s.x; m.ty = s.y; m.spd = 1.3; }
+            } else if (now > m.idleAt) {
+                // Paseo por su área técnica.
+                m.tx = s.x + (Math.random() - 0.5) * 4; m.ty = s.y + (Math.random() - 0.3) * 0.8; m.spd = 0.9 + Math.random() * 0.5;
+                m.idleAt = now + 2200 + Math.random() * 3000;
+            }
+            stepMover(m, dt, 1);
+            var p = toSvg(m.x, m.y);
+            var k = 1 + (nodeScale - 1) * 0.7;
+            var bob = 0, rot = 0;
+            if (m.mood === 'celebrate') bob = -Math.abs(Math.sin(m.moodT * 9)) * 7;
+            else if (m.mood === 'protest' || m.mood === 'argue') rot = Math.sin(m.moodT * 16) * 12;
+            else if (m.mood === 'despair') rot = Math.sin(m.moodT * 3) * 8;
+            else if (m.mood === 'applaud' || m.mood === 'nervous') bob = -Math.abs(Math.sin(m.moodT * 7)) * 2.5;
+            m.el.setAttribute('transform', 'translate(' + p.x.toFixed(1) + ',' + (p.y + bob).toFixed(1) + ') scale(' + k.toFixed(3) + ')');
+            m.body.setAttribute('transform', rot ? 'rotate(' + rot.toFixed(1) + ')' : '');
+            var op = m.mood ? Math.min(1, m.moodT * 5, (m.moodDur - m.moodT) * 3) : 0;
+            m.bubble.setAttribute('opacity', Math.max(0, op).toFixed(2));
+        });
+    }
+
+    function resetStaff() {
+        clearScenes();
+        clearLeavers();
+        ['home', 'away'].forEach(function (side) {
+            var m = managers[side];
+            if (m) { m.mood = null; m.bubble.setAttribute('opacity', '0'); }
+        });
+    }
+
+    // Eventos de una jugada en directo: lesión, reacción del entrenador.
+    function playEvents(play, d) {
+        if (!play) return;
+        if (play.kind === 'injury' || /cae lesionado|camilla/i.test(play.text || '')) startInjury(play, d);
+        managerReact(play, d);
     }
 
     /* ---------------- UI ---------------- */
@@ -2547,7 +3057,7 @@
         var minEl = $('minute');
         if (narrEl) narrEl.textContent = summarize(play.text);
         if (minEl) minEl.textContent = label;
-        renderPlayers(d, play);
+        renderPlayers(d, play, false);
         playResolved(play, d, immediate);
     }
 
@@ -2647,8 +3157,9 @@
         });
     }
 
-    function renderPlayers(d, play) {
+    function renderPlayers(d, play, animate) {
         if (!playersLayer) return;
+        var hadPlayers = Object.keys(playerState).length > 0;
         ensureRosterNumbers(d);
         var lineups = effectiveLineups(d, play);
         var layouts = layoutTeam(lineups.home, 'home').concat(layoutTeam(lineups.away, 'away'));
@@ -2664,6 +3175,15 @@
             var st = playerState[k];
             if (!st) {
                 st = { name: p.name, side: p.side, pos: p.pos, baseX: p.x, baseY: p.y, x: p.x, y: p.y, vx: 0, vy: 0, tx: p.x, ty: p.y, el: null };
+                if (leavers[k]) { st = leavers[k]; delete leavers[k]; st.leaving = null; if (st.el) { st.el.removeAttribute('data-leaving'); st.el.classList.remove('campo-leaving', 'campo-sent-off'); st.el.style.opacity = ''; } }
+                else if (animate && hadPlayers) {
+                    // Entra desde su banquillo, trotando hasta su sitio (nada de aparecer de golpe).
+                    var sp = benchSpotLogical(p.side);
+                    st.x = sp.x; st.y = sp.y; st.spd = 4; st.hx = p.x; st.hy = p.y;
+                    st.idleAt = performance.now() + 4000;
+                    var bi = benchOut[p.side].indexOf(p.name);
+                    if (bi !== -1) benchOut[p.side].splice(bi, 1);
+                }
                 playerState[k] = st;
             } else {
                 st.pos = p.pos;
@@ -2679,16 +3199,21 @@
         });
         Object.keys(playerState).forEach(function (k) {
             if (!live[k]) {
+                // En directo: el sustituido se va andando a su banquillo y el expulsado, a vestuarios.
+                if (animate && hadPlayers && playerState[k].el) { startLeaving(k, playerState[k], leaveReason(playerState[k], play, d)); return; }
                 if (playerState[k].el && playerState[k].el.parentNode) playerState[k].el.parentNode.removeChild(playerState[k].el);
                 delete playerState[k];
             }
         });
+        if (!animate) clearLeavers();
         if (rebuild) {
             Array.prototype.forEach.call(playersLayer.querySelectorAll('.campo-player'), function (g) {
                 var k = g.getAttribute('data-side') + ':' + g.getAttribute('data-name');
-                if (!live[k]) playersLayer.removeChild(g);
+                if (!live[k] && !leavers[k] && !scenes.some(function (sc) { return sc.key === k && sc.subbed; })) playersLayer.removeChild(g);
             });
         }
+        drawBenches(d);
+        ensureManagers(d);
         ensureRef(d);
         applyCompactNames();
     }
@@ -2785,7 +3310,7 @@
         var secondary = kit.ring;
         var ink = kit.ink;
         var num = assignNumber(p.side, p.name);
-        var pos = toSvg(st.x, st.y);
+        var pos = toView(st.x, st.y);
         var g = svgEl('g', {
             'class': 'campo-player',
             'data-name': p.name,
@@ -2951,7 +3476,7 @@
         if (d.seeking) return;
         keepViewOnReset = false;
         var play = currentPlay(d);
-        renderPlayers(d, play);
+        renderPlayers(d, play, lastPlayIndex >= 0 && !!d.started);
         updateChrome(d, play);
         setCaption(play, d);
         if (play && play.i !== lastPlayIndex) {
@@ -2984,6 +3509,14 @@
         refState = { x: 53, y: 62, el: null, name: '' };
         motor.phases = []; motor.phase = null; motor.actions = []; motor.action = null;
         ball = { x: 50, y: 50, h: 0, state: 'free', owner: null };
+        resetStaff();
+        leavers = {};
+        benchOut = { home: [], away: [] };
+        benchSig = '';
+        if (benchLayer) benchLayer.innerHTML = '';
+        if (staffLayer) staffLayer.innerHTML = '';
+        managers = { home: null, away: null };
+        setEnds(1, true);
         if (playersLayer) playersLayer.innerHTML = '';
         if (built) placeBall();
     }
@@ -3045,6 +3578,13 @@
             return (r.phases || []).map(function (ph) {
                 return { ms: ph.ms, pose: ph.pose, kickoff: !!ph.kickoff, ball: ph.ballPath, players: ph.players, ref: ph.ref };
             });
+        },
+        debugStaff: function () {
+            return { flipped: ends.flipped, period: ends.period, leavers: Object.keys(leavers).map(function (k) { return k + ':' + leavers[k].leaving; }),
+                scenes: scenes.map(function (sc) { return sc.key + ':' + sc.stage + (sc.serious ? ':grave' : ''); }),
+                moods: { home: managers.home && managers.home.mood, away: managers.away && managers.away.mood },
+                bench: { home: benchNames('home', data() || {}), away: benchNames('away', data() || {}) }, benchOut: benchOut,
+                held: Object.keys(playerState).filter(function (k) { return playerState[k].hold; }) };
         },
         debugMotor: function () {
             var lag = 0, n = 0;

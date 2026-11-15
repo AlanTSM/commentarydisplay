@@ -7972,6 +7972,7 @@
                 paused: isPaused,
                 finished: matchFinished,
                 seeking: campoSeekUntil != null || campoSeekPlayIndex != null || campoSeekUntilLine != null,
+                redCarded: Array.from(redCardedPlayers || []),
                 score: (document.getElementById('score') || {}).textContent || '0 - 0',
                 narration: (document.getElementById('narration') || {}).textContent || '',
                 playersIn: findPlayersInText,

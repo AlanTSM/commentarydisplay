@@ -300,3 +300,11 @@ html.campo-noscroll, html.campo-noscroll body { overflow: hidden; }
 .campo-gk .campo-gk-letter {
     user-select: none;
 }
+
+/* Sesión 10: lesionados, expulsados, banquillos y entrenadores */
+.campo-player.campo-down .campo-disk { stroke: #dc2626; stroke-width: 4; }
+.campo-player.campo-on-stretcher { opacity: 0.9; }
+.campo-player.campo-sent-off .campo-disk { stroke: #dc2626; stroke-width: 4; stroke-dasharray: 6 4; }
+.campo-player.campo-leaving .campo-name { opacity: 0.85; }
+.campo-bench-player text, .campo-manager text { pointer-events: none; }
+.campo-banner { pointer-events: none; }
