@@ -3388,7 +3388,8 @@
         if (r.type === 'throw') ball.fl.H = 0.45;
         if (r.kick && r.kick.net) ball.fl.net = true;
         if (r.kick && r.kick.kind === 'over') ball.fl.H = 3;
-        if (motor.phase === r.phase) { motor.actions = []; motor.action = null; }
+        // Hecha la reanudación, la fase acaba enseguida y el juego sigue (nadie se queda congelado).
+        if (motor.phase === r.phase) { motor.actions = []; motor.action = null; if (motor.phase) motor.phaseDur = Math.min(motor.phaseDur, motor.phaseT + 0.8); }
     }
 
     // ¿Ha salido el balón? Se reanuda con saque de banda, de puerta o córner (nunca rebota en la línea).
@@ -3648,8 +3649,13 @@
         if (!o || o.hold) return;
         var att = o.side;
         var ax = ptAtt(o.x, att);
-        if (ax < 78) return;
         if (now < (o.searchAt || 0)) return;
+        if (ax < 78) {
+            // Sin jugada narrada: conduce hacia delante con calma (no se queda plantado con el balón).
+            o.tx = fromAtt(Math.min(78, ax + 5 + rng() * 5), att); o.ty = clamp(o.y + (rng() - 0.5) * 8, 10, 90);
+            o.spd = 2 + rng(); o.searchAt = now + 1100 + rng() * 600;
+            return;
+        }
         var nax = clamp(ax + (rng() - 0.3) * 4, 78, 90);
         o.tx = fromAtt(nax, att); o.ty = clamp(o.y + (rng() - 0.5) * 9, 22, 78);
         o.spd = 1.6 + rng();
