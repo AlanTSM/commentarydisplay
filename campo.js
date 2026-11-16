@@ -3369,7 +3369,7 @@
 
     /* ---------------- Sesiones 15-17: reanudaciones (banda, puerta, córner, centro), faltas con y sin
        barrera, fueras de juego, linieres y protestas. Todo ocurre dentro de la simulación del coreógrafo. ---- */
-    var simDbg = [], simSegT = 99, tlData = null;
+    var simDbg = [], simSegT = 99, tlData = null, simNextKind = null;
     var simRestart = null, simEvents = [], simNs = 0, simAR = [], simGoalPlay = false, simAttackSide = 'home', simExiting = false;
     var RESTART_PREP = { throw: 1.3, goalkick: 1.9, corner: 2.1, free: 1.5, wall: 2.8, offside: 1.8, penalty: 2.6 };
     var EVENT_LABEL = { throw: 'Saque de banda', goalkick: 'Saque de puerta', corner: 'Córner', free: 'Falta', wall: 'Falta · barrera',
@@ -3828,6 +3828,8 @@
         }
         var last = phases[phases.length - 1], lp = last.ballPath || [], e = lp[lp.length - 1];
         if (!e || e.kind) return;
+        // Si la jugada siguiente empieza con su propia falta o reanudación, este balón no se va fuera (no se encadenan dos).
+        if (/^(foul|yellow|red|penalty|corner|throwin|goalkick|offside|freekick)$/.test(simNextKind || '')) return;
         var dir = attack === 'home' ? 1 : -1;
         if (play.kind === 'clearance' && rng() < 0.7) {
             lp.push({ x: clamp(e.x + dir * (6 + rng() * 8), 3, 97), y: e.y < 50 ? -3 : 103, kind: 'lofted' });
@@ -4125,11 +4127,14 @@
                 var dP = Object.assign({}, d, { homeStarters: h.before.home, awayStarters: h.before.away, redCarded: [] });
                 var T = segDur[i];
                 simSegT = T;
+                simNextKind = plays[i + 1] ? plays[i + 1].kind : null;
                 // Falta, córner... de la jugada anterior que no llegó a empezar: se hace ahora (nunca se pierde).
-                if (!simRestart && motor.phases && motor.phases.length && !(play.kind === 'sub')) {
+                var leftSpPh = null;
+                if (motor.phases && motor.phases.length && !(play.kind === 'sub')) {
                     var leftSp = null;
-                    motor.phases.forEach(function (q) { if (!leftSp && q.setPiece) leftSp = q.setPiece; });
-                    if (leftSp) beginRestart(leftSp);
+                    motor.phases.forEach(function (q) { if (!leftSp && q.setPiece) { leftSp = q.setPiece; leftSpPh = q; } });
+                    // Si aún hay otra reanudación en curso (p. ej. un saque de banda), la falta va justo después.
+                    if (leftSp && !simRestart) { beginRestart(leftSp); leftSpPh = null; }
                 }
                 var plan = planPlay(play, dP);
                 // Tras el descanso (fundido) todos aparecen ya en la formación de saque de centro.
@@ -4184,6 +4189,7 @@
                         if (koI >= 0) koLeft = pend.slice(koI).filter(isKo).map(function (q) { var o = Object.assign({}, q); o.ms = Math.min(o.ms || 700, 900); return o; });
                     }
                     if (koLeft.length) phases = koLeft.concat(phases);
+                    if (leftSpPh) { var lsp = Object.assign({}, leftSpPh); lsp.ms = Math.min(lsp.ms || 2400, 2400); phases = [lsp].concat(phases); }
                     motor.actions = []; motor.action = null;
                     if (simRestart) { motor.phases = phases.slice(0); motor.phase = null; motor.waitRestart = true; }
                     else { motor.waitRestart = false; motor.phases = phases.slice(1); startMotorPhase(phases[0]); }
