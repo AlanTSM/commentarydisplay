@@ -3432,7 +3432,8 @@
         if (simRestart) restartKick(simRestart);
         var r = { type: sp.type, side: sp.side, spot: { x: clamp(sp.spot.x, -0.5, 100.5), y: clamp(sp.spot.y, -0.5, 100.5) }, t: 0, stage: 0,
             wall: [], kick: sp.kick || null, prep: RESTART_PREP[sp.wallUp ? 'wall' : sp.type] || 1.6, auto: !!sp.auto, wallUp: !!sp.wallUp,
-            offside: !!sp.offside, protest: sp.protest || null, protestN: sp.protestN || 2, born: simClock };
+            offside: !!sp.offside, protest: sp.protest || null, protestN: sp.protestN || 2, born: simClock, hurry: !!sp.hurry };
+        if (r.hurry) r.prep = Math.min(r.prep, 1.4);   // va con retraso: se coloca y se saca rápido
         var inField = ball.x >= -0.2 && ball.x <= 100.2 && ball.y >= -0.2 && ball.y <= 100.2;
         // Lo narrado sale de lo que acaba de pasar: antes de un córner, saque de banda o de puerta el balón
         // sale de verdad por ese sitio; una falta se pita donde está el balón (se lleva hasta allí).
@@ -3642,7 +3643,7 @@
             // ... y los que se colocan alrededor (los del rechace, los que se apartan) ya han llegado: nadie cruza la barrera al lanzar.
             if (wallOk && r.waitK) wallOk = r.waitK.every(function (k) { var st = playerState[k]; return !st || mDist(st.x, st.y, st.tx, st.ty) < 1.0; });
             var ready = ball.state !== 'flight' && dBall <= 1.0 && (!ts || mDist(ts.x, ts.y, r.takerAt.x, r.takerAt.y) < 1.6) && r.t >= r.prep && wallOk;
-            if (ready || r.t > r.prep + 4) {
+            if (ready || r.t > r.prep + (r.hurry ? 1.6 : 4)) {
                 r.stage = 1; r.t1 = r.t;
                 if (!r.evDone) { simEvent(r.evType, r.spot.x, r.spot.y, restartEvExtra(r)); r.evDone = true; }
                 if (ts && r.type === 'throw') { ts.throwing = true; ball.state = 'held'; ball.owner = r.taker; }
@@ -4149,7 +4150,7 @@
                     var leftSp = null;
                     motor.phases.forEach(function (q) { if (!leftSp && q.setPiece) { leftSp = q.setPiece; leftSpPh = q; } });
                     // Si aún hay otra reanudación en curso (p. ej. un saque de banda), la falta va justo después.
-                    if (leftSp && !simRestart) { beginRestart(leftSp); leftSpPh = null; }
+                    if (leftSp && !simRestart) { beginRestart(Object.assign({}, leftSp, { hurry: true })); leftSpPh = null; }
                 }
                 var plan = planPlay(play, dP);
                 // Tras el descanso (fundido) todos aparecen ya en la formación de saque de centro.
@@ -4204,7 +4205,7 @@
                         if (koI >= 0) koLeft = pend.slice(koI).filter(isKo).map(function (q) { var o = Object.assign({}, q); o.ms = Math.min(o.ms || 700, 900); return o; });
                     }
                     if (koLeft.length) phases = koLeft.concat(phases);
-                    if (leftSpPh) { var lsp = Object.assign({}, leftSpPh); lsp.ms = Math.min(lsp.ms || 2400, 2400); phases = [lsp].concat(phases); }
+                    if (leftSpPh) { var lsp = Object.assign({}, leftSpPh); lsp.setPiece = Object.assign({}, leftSpPh.setPiece, { hurry: true }); lsp.ms = Math.min(lsp.ms || 2400, 2400); phases = [lsp].concat(phases); }
                     motor.actions = []; motor.action = null;
                     if (simRestart) { motor.phases = phases.slice(0); motor.phase = null; motor.waitRestart = true; }
                     else { motor.waitRestart = false; motor.phases = phases.slice(1); startMotorPhase(phases[0]); }
@@ -4296,7 +4297,7 @@
                 advance(T, ctx, segStep);
                 // Gol que llega tarde (la jugada esperó a una falta): la jugada se alarga hasta que el balón entra y se celebra un poco.
                 if ((play.kind === 'goal' || play.kind === 'own-goal') && goalS == null && !seg.pause) {
-                    var tMax = simClock + 6;
+                    var tMax = simClock + 12;
                     while (goalS == null && simClock < tMax) advance(0.2, ctx, segStep);
                     if (goalS != null) advance(2.4, ctx, segStep);
                 }
