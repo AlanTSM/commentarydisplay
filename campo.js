@@ -4163,6 +4163,16 @@
                         });
                         motor.scale = 1;
                     }
+                    // Saque de centro de la jugada anterior (tras gol) que no llegó a hacerse: va primero (pase atrás, nunca conduciendo).
+                    var koLeft = [];
+                    var koBall = (ball.state === 'flight' && ball.fl && ball.fl.kind === 'reset' && mDist(ball.fl.to ? ball.fl.to.x : 50, ball.fl.to ? ball.fl.to.y : 50, 50, 50) < 2) || (ball.state !== 'flight' && mDist(ball.x, ball.y, 50, 50) < 2.5);
+                    if (!simRestart && koBall) {
+                        var pend = (motor.phase ? [motor.phase] : []).concat(motor.phases || []);
+                        var isKo = function (q) { var bp = q.ballPath || []; return q.kickoff || q.kickPass || (q.pose === false && bp.length === 1 && Math.abs(bp[0].x - 50) < 0.5 && Math.abs(bp[0].y - 50) < 0.5); };
+                        var koI = pend.findIndex(isKo);
+                        if (koI >= 0) koLeft = pend.slice(koI).filter(isKo).map(function (q) { var o = Object.assign({}, q); o.ms = Math.min(o.ms || 700, 900); return o; });
+                    }
+                    if (koLeft.length) phases = koLeft.concat(phases);
                     motor.actions = []; motor.action = null;
                     if (simRestart) { motor.phases = phases.slice(0); motor.phase = null; motor.waitRestart = true; }
                     else { motor.waitRestart = false; motor.phases = phases.slice(1); startMotorPhase(phases[0]); }
