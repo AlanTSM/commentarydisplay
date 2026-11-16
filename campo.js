@@ -3369,7 +3369,7 @@
 
     /* ---------------- Sesiones 15-17: reanudaciones (banda, puerta, córner, centro), faltas con y sin
        barrera, fueras de juego, linieres y protestas. Todo ocurre dentro de la simulación del coreógrafo. ---- */
-    var simDbg = [], simSegT = 99, tlData = null, simNextKind = null, simNextText = '';
+    var simDbg = [], simSegT = 99, tlData = null, simNextKind = null, simNextText = '', simNextSide = null;
     var FK_GOAL_RE = /(falta a cargo|lanza la falta|lanzamiento de falta|la falta se cuela|golpeo de falta|libre directo|tiro libre|ejecuta la falta|falta directa|saca la falta|clava la falta|de falta)/;
     var simRestart = null, simEvents = [], simNs = 0, simAR = [], simGoalPlay = false, simAttackSide = 'home', simExiting = false;
     var RESTART_PREP = { throw: 1.3, goalkick: 1.9, corner: 2.1, free: 1.5, wall: 2.8, offside: 1.8, penalty: 2.6 };
@@ -3800,7 +3800,7 @@
             var carded = play.kind === 'yellow' || play.kind === 'red';
             var protest = carded || /protest|reclam|airad/.test(t) || rng() < 0.4;
             // El lanzamiento se narra en la jugada siguiente (gol de falta): aquí solo se coloca y espera.
-            var holdFk = simulating && simNextKind === 'goal' && FK_GOAL_RE.test(simNextText);
+            var holdFk = simulating && simNextKind === 'goal' && simNextSide === fouled && FK_GOAL_RE.test(simNextText) && !/falta[^.]{0,40}\bsobre\b|comete (una )?falta|derriba/.test(simNextText);
             if (holdFk) kick = null;
             var spPh = { players: clonePlayers(first.players), ballPath: [{ x: spot.x, y: spot.y }], ms: wallUp ? 3600 : 2400, highlight: first.highlight, ref: null,
                 setPiece: { type: 'free', side: fouled, spot: spot, wallUp: wallUp, kick: kick, protest: protest ? attack : null, protestN: carded ? 3 : 2, hold: holdFk } };
@@ -4161,6 +4161,7 @@
                 simSegT = T;
                 simNextKind = plays[i + 1] ? plays[i + 1].kind : null;
                 simNextText = plays[i + 1] ? foldText(plays[i + 1].text || '') : '';
+                simNextSide = plays[i + 1] ? sideOfTeam(plays[i + 1].team, dP) : null;
                 // Falta, córner... de la jugada anterior que no llegó a empezar: se hace ahora (nunca se pierde).
                 var leftSpPh = null;
                 if (motor.phases && motor.phases.length && !(play.kind === 'sub')) {
