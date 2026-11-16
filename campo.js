@@ -3622,6 +3622,29 @@
             });
             if (moved) { st.tx = tx; st.ty = ty; st.hx = tx; st.hy = ty; st.pend = null; st.spd = Math.max(st.spd || 0, 4.5); if (!r.waitK) r.waitK = []; if (r.waitK.indexOf(k) < 0) r.waitK.push(k); }
         });
+        // Alrededor de la barrera, nadie pegado a nadie (marcadores y atacantes a un paso, no encima).
+        var sep = 3.7 * sepFactor(), wa = r.wallAt;
+        var near = Object.keys(playerState).filter(function (k) {
+            var st = playerState[k];
+            return st && !st.leaving && st.pos !== 'GK' && k !== r.taker && mDist(st.tx, st.ty, wa.x, wa.y) < 11;
+        });
+        for (var it2 = 0; it2 < 2; it2++) near.forEach(function (ka, ia) {
+            near.forEach(function (kb, ib) {
+                if (ib <= ia) return;
+                var A = playerState[ka], B = playerState[kb];
+                var mv = r.wall.indexOf(kb) >= 0 ? (r.wall.indexOf(ka) >= 0 ? null : A) : B;   // la barrera no se mueve
+                if (!mv) return;
+                var fix = mv === A ? B : A;
+                var dx = (mv.tx - fix.tx) * M_X, dy = (mv.ty - fix.ty) * M_Y, dd = Math.hypot(dx, dy);
+                if (dd >= sep) return;
+                if (dd < 0.2) { dx = (mv.tx - wa.x) * M_X || 1; dy = (mv.ty - wa.y) * M_Y; dd = Math.hypot(dx, dy) || 1; }
+                var tx = clamp(fix.tx + dx / dd * sep / M_X, 0.5, 99.5), ty = clamp(fix.ty + dy / dd * sep / M_Y, 0.5, 99.5);
+                mv.tx = tx; mv.ty = ty; mv.hx = tx; mv.hy = ty; mv.pend = null; mv.spd = Math.max(mv.spd || 0, 4.5);
+                var km = mv === A ? ka : kb;
+                if (!r.waitK) r.waitK = [];
+                if (r.waitK.indexOf(km) < 0) r.waitK.push(km);
+            });
+        });
     }
 
     function stepRestart(dt) {
@@ -3651,7 +3674,7 @@
             // ... y los que se colocan alrededor (los del rechace, los que se apartan) ya han llegado: nadie cruza la barrera al lanzar.
             if (wallOk && r.waitK) wallOk = r.waitK.every(function (k) { var st = playerState[k]; return !st || mDist(st.x, st.y, st.tx, st.ty) < 1.0; });
             var ready = ball.state !== 'flight' && dBall <= 1.0 && (!ts || mDist(ts.x, ts.y, r.takerAt.x, r.takerAt.y) < 1.6) && r.t >= r.prep && wallOk;
-            if (!r.hold && (ready || r.t > r.prep + (r.hurry ? 1.6 : 4))) {
+            if (!r.hold && (ready || r.t > r.prep + (r.wallUp ? 4.5 : (r.hurry ? 1.6 : 4)))) {
                 r.stage = 1; r.t1 = r.t;
                 if (!r.evDone) { simEvent(r.evType, r.spot.x, r.spot.y, restartEvExtra(r)); r.evDone = true; }
                 if (ts && r.type === 'throw') { ts.throwing = true; ball.state = 'held'; ball.owner = r.taker; }
