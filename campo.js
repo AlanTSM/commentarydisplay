@@ -2228,6 +2228,11 @@
             var owner = holderOf(ball.owner);
             var ready = !owner || mDist(owner.x, owner.y, owner.tx, owner.ty) < 2.5;
             if (ball.state === 'flight') return;
+            // Pase al que cae en fuera de juego: sale cuando ya está por delante de la defensa.
+            if (a.type === 'pass' && motor.phase && motor.phase.waitRecv === a.to && motor.actionT < 3.5) {
+                var wr = holderOf(a.to);
+                if (wr && (mDist(wr.x, wr.y, wr.tx, wr.ty) > 0.8 || motor.phaseT < 1.0)) return;
+            }
             if ((ready && motor.actionT > 0.12 / tp) || motor.actionT > 0.9 / tp) {
                 var to = a.pt;
                 var recv = a.type === 'pass' ? holderOf(a.to) : null;
@@ -3768,6 +3773,39 @@
             // El asistente levanta la bandera y saca el equipo que defendía, desde donde estaba el adelantado.
             var spotO = { x: clamp(fp.x, 3, 97), y: clamp(fp.y, 4, 96) };
             first.ms = Math.min(first.ms || 700, 900);
+            // Fuera de juego de verdad: en el momento del pase el receptor está por delante del penúltimo defensor.
+            var opl = first.players || {}, ogx = goalXOf(attack), odir = ogx === 100 ? 1 : -1;
+            var isGkK = function (k) { var st = playerState[k]; return st ? st.pos === 'GK' : false; };
+            var lp0 = lp[0] || fp, passer = null, receiver = null, pd = 1e9, rd = 1e9;
+            Object.keys(opl).forEach(function (k) {
+                if (k.split(':')[0] !== attack || isGkK(k)) return;
+                var d0 = mDist(opl[k].x, opl[k].y, lp0.x, lp0.y);
+                if (d0 < pd) { pd = d0; passer = k; }
+            });
+            Object.keys(opl).forEach(function (k) {
+                if (k.split(':')[0] !== attack || isGkK(k) || k === passer) return;
+                var d1 = mDist(opl[k].x, opl[k].y, fp.x, fp.y);
+                if (d1 < rd) { rd = d1; receiver = k; }
+            });
+            if (receiver && passer) {
+                var lineX = ogx - odir * (13 + rng() * 6) / M_X;
+                var np = {};
+                Object.keys(opl).forEach(function (k) {
+                    var t0 = opl[k];
+                    if (k.split(':')[0] === opp && !isGkK(k) && (t0.x - lineX) * odir > 0) np[k] = { x: lineX - odir * rng() * 0.6, y: t0.y };   // la defensa sube en línea
+                    else if (k.split(':')[0] === attack && k !== receiver && (t0.x - lineX) * odir > -1 / M_X) np[k] = { x: lineX - odir * (1.5 + rng() * 3) / M_X, y: t0.y };   // los demás, en posición legal
+                    else np[k] = { x: t0.x, y: t0.y };
+                });
+                var ry = clamp(fp.y, 24, 76);
+                np[receiver] = { x: lineX + odir * (2.2 + rng() * 1.6) / M_X, y: ry };
+                var pp = np[passer];
+                if ((pp.x - lineX) * odir > -6 / M_X) np[passer] = pp = { x: lineX - odir * (12 + rng() * 6) / M_X, y: pp.y };
+                first.players = np;
+                first.ballPath = [{ x: pp.x, y: pp.y }, { x: np[receiver].x, y: np[receiver].y }];
+                first.waitRecv = receiver;
+                first.ms = 1800;
+                spotO = { x: clamp(np[receiver].x, 3, 97), y: clamp(np[receiver].y, 4, 96) };
+            }
             return [first, { players: clonePlayers(first.players), ballPath: [{ x: spotO.x, y: spotO.y }], ms: 2600, highlight: first.highlight, ref: first.ref,
                 setPiece: { type: 'free', side: opp, spot: spotO, offside: true } }];
         }
