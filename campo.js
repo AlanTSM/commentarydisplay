@@ -4229,7 +4229,7 @@
                 var poseS = null, goalS = null, sadEnd = null, lastPhase = motor.phase;
                 var segT0 = simClock, outForced = false, outIdx = -1, sawNet = false, goalJumped = false, goalForce = false;
                 if (phases && !seg.pause) phases.forEach(function (ph, qi) { if (outIdx < 0 && (ph.ballPath || []).some(function (q) { return q.kind === 'shot' || q.kind === 'over'; })) outIdx = qi; });
-                advance(T, ctx, function () {
+                var segStep = function () {
                     if (motor.phase !== lastPhase) {
                         if (lastPhase && lastPhase.pose !== false && motor.phase && motor.phase.pose === false && poseS == null) poseS = ns;
                         if (lastPhase && lastPhase.goal && sadEnd == null) sadEnd = ns;
@@ -4292,7 +4292,14 @@
                     }
                     if (ball.fl && ball.fl.net && ball.fl.at >= segT0 - 1e-6 && !(ball.fl.born != null && ball.fl.born < segT0 - 1e-6)) sawNet = true;   // un remate de la jugada anterior no cuenta
                     if (goalS == null && isGoalPlay && ball.lock && sawNet) goalS = ns;
-                });
+                };
+                advance(T, ctx, segStep);
+                // Gol que llega tarde (la jugada esperó a una falta): la jugada se alarga hasta que el balón entra y se celebra un poco.
+                if ((play.kind === 'goal' || play.kind === 'own-goal') && goalS == null && !seg.pause) {
+                    var tMax = simClock + 6;
+                    while (goalS == null && simClock < tMax) advance(0.2, ctx, segStep);
+                    if (goalS != null) advance(2.4, ctx, segStep);
+                }
                 seg.s1 = ns;
                 seg.pose = poseS != null ? poseS : Math.max(seg.s0, ns - 2);
                 seg.goalS = goalS;
