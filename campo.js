@@ -4287,6 +4287,13 @@
                 if (goalS != null && !simEvents.some(function (e) { return e.type === 'kickoff' && e.s >= goalS; })) simEvents.push({ s: Math.max(goalS, ns - 2), type: 'kickoff', x: 50, y: 50 });
                 segs.push(seg);
             });
+            // Una falta narrada en la última jugada se lanza antes del final (no se queda sin sacar).
+            if (simRestart && !simRestart.auto) {
+                var lastSeg = segs[segs.length - 1], tEnd = simClock + 10;
+                while (simRestart && simClock < tEnd) advance(0.2, { attack: simAttackSide, frozen: false, search: false });
+                if (!simRestart) advance(1.2, { attack: simAttackSide, frozen: false, search: false });
+                if (lastSeg) lastSeg.s1 = ns;
+            }
             // Final: todos se retiran por el túnel.
             var ex = { i: -2, s0: ns, kind: 'exit', period: period, flipped: simFlipped };
             if (simRestart) restartKick(simRestart);
