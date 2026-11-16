@@ -3432,7 +3432,7 @@
         if (simRestart) restartKick(simRestart);
         var r = { type: sp.type, side: sp.side, spot: { x: clamp(sp.spot.x, -0.5, 100.5), y: clamp(sp.spot.y, -0.5, 100.5) }, t: 0, stage: 0,
             wall: [], kick: sp.kick || null, prep: RESTART_PREP[sp.wallUp ? 'wall' : sp.type] || 1.6, auto: !!sp.auto, wallUp: !!sp.wallUp,
-            offside: !!sp.offside, protest: sp.protest || null, protestN: sp.protestN || 2 };
+            offside: !!sp.offside, protest: sp.protest || null, protestN: sp.protestN || 2, born: simClock };
         var inField = ball.x >= -0.2 && ball.x <= 100.2 && ball.y >= -0.2 && ball.y <= 100.2;
         // Lo narrado sale de lo que acaba de pasar: antes de un córner, saque de banda o de puerta el balón
         // sale de verdad por ese sitio; una falta se pita donde está el balón (se lleva hasta allí).
@@ -3674,6 +3674,7 @@
         ball.lastSide = r.side;
         if (r.type === 'throw') ball.fl.H = 0.45;
         if (r.kick && r.kick.net) ball.fl.net = true;
+        ball.fl.born = r.born;   // lanzamiento de una reanudación (puede venir de la jugada anterior)
         if (r.kick && r.kick.kind === 'over') ball.fl.H = 2.6;
         // Hecha la reanudación, la fase acaba enseguida y el juego sigue (nadie se queda congelado).
         if (motor.phase === r.phase) { motor.actions = []; motor.action = null; if (motor.phase) motor.phaseDur = Math.min(motor.phaseDur, motor.phaseT + 0.8); }
@@ -3777,9 +3778,10 @@
             if (wallUp) {
                 var gdx = (fgx - spot.x) * M_X, gdy = (50 - spot.y) * M_Y, gl = Math.max(0.1, Math.hypot(gdx, gdy));
                 var wallAt = { x: spot.x + gdx / gl * 9.15 / M_X, y: spot.y + gdy / gl * 9.15 / M_Y };
-                if (/barrera/.test(t) && /estrell|rebota|choca|se queda|despeja/.test(t)) kick = { x: wallAt.x, y: wallAt.y, kind: 'shot' };
+                if (play.kind === 'goal') kick = { x: fgx + fdir * 1.8, y: 50 + side * (2.2 + rng() * 2.4), kind: 'shot', net: true };   // falta directa a la red (entre los palos)
+                else if (/barrera/.test(t) && /estrell|rebota|choca|se queda|despeja/.test(t)) kick = { x: wallAt.x, y: wallAt.y, kind: 'shot' };
                 else if (/larguero|por encima|alto|arriba|nubes/.test(t)) kick = { x: fgx + fdir * 2.6, y: 50 + side * rng() * 2.5, kind: 'over', net: true };
-                else if (/portero|ataja|vuela|atrapa|blocad|saca la falta|despeja/.test(t)) kick = { x: fgx - fdir * 1.2, y: 50 + side * 2.5, kind: 'shot' };
+                else if (/portero|ataja|vuela|atrapa|blocad|saca la falta|despeja|desvi|rechaz|detiene|manopla|para el|repele/.test(t)) kick = { x: fgx - fdir * 1.2, y: 50 + side * 2.5, kind: 'shot' };
                 else kick = { x: fgx + fdir * 1.8, y: 50 + side * (5.6 + rng() * 3), kind: 'shot', net: true };
             }
             var carded = play.kind === 'yellow' || play.kind === 'red';
@@ -4267,7 +4269,7 @@
                             ball.fl.net = true;
                         }
                     }
-                    if (ball.fl && ball.fl.net && ball.fl.at >= segT0 - 1e-6) sawNet = true;   // un remate de la jugada anterior no cuenta
+                    if (ball.fl && ball.fl.net && ball.fl.at >= segT0 - 1e-6 && !(ball.fl.born != null && ball.fl.born < segT0 - 1e-6)) sawNet = true;   // un remate de la jugada anterior no cuenta
                     if (goalS == null && isGoalPlay && ball.lock && sawNet) goalS = ns;
                 });
                 seg.s1 = ns;
