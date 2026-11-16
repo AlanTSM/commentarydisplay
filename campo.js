@@ -247,10 +247,12 @@
     function classify(text) {
         var s = String(text || '').toLowerCase();
         // «ocasión manifiesta de gol», «dedica el gol al banquillo»... no son un gol de esta jugada.
-        s = s.replace(/ocasi[oó]n (?:manifiesta )?de gol|posible gol|dedica el gol|celebra el gol|tras el gol/g, ' ');
-        if (/autogol|propia puerta/.test(s)) return 'own-goal';
+        s = s.replace(/ocasi[oó]n(?:es)? (?:manifiesta |clara )?de gol|posible gol|dedica el gol|celebra el gol|tras el gol|(?:merec[ií]a|merece|mereci[oó]|ol[ií]a a|huele a|roza el|rozó el|cerca del|casi el|sin|acabar en|terminar en|l[ií]nea de|ocasiones de|buscando el|busca el|en busca del|a por el) gol|gol en contra|gol(?:es)? anulado|anula(?:do)? el gol/g, ' ');
+        // Gol anulado (fuera de juego, VAR, falta previa): no sube al marcador.
+        var annulled = /anula|anulado|no sube al marcador|no vale|invalida/.test(s);
+        if (!annulled && /autogol|propia puerta/.test(s)) return 'own-goal';
         // Evitar falsos positivos como "Golpea las vallas".
-        if (/¡+gol|go{3,}l|(?:^|[^\wáéíóúñ])¡?gol(?:es)?\b/i.test(s)) return 'goal';
+        if (!annulled && /¡+gol|go{3,}l|(?:^|[^\wáéíóúñ])¡?gol(?:es)?\b/i.test(s)) return 'goal';
         if (/penalti|penalty/.test(s)) return 'penalty';
         if (/c[oó]rner|saque de esquina/.test(s)) return 'corner';
         if (/saque de (puerta|meta)/.test(s)) return 'goalkick';
@@ -512,6 +514,50 @@
 
     // Saques de centro: primera jugada del partido, de la segunda parte y de cada parte de la prórroga.
     // Saca el equipo de esa primera jugada en la primera parte; en la segunda, el otro (reglamento).
+    /* ---- Goles según el marcador narrado ----
+       La narración trae tras cada gol la línea «Local n-m Visitante ...». Esa línea manda: una jugada
+       solo es gol si el marcador cambia (un «¡gol!» anulado, «la jugada merecía gol»... no cuentan), y
+       el equipo que marca es el que sube en el marcador (en una falta directa la cabecera es la del
+       equipo que hizo la falta). Si el partido no trae esas líneas, se queda la clasificación por texto. */
+    function scoreLinesIn(text, d) {
+        var re = /(?:^|\n)\s*(?:\.\.\.)?\s*([^\n]*?[A-Za-zÀ-ÿ.)][^\n]*?)\s(\d{1,2})\s?-\s?(\d{1,2})\s([^\n]*?[A-Za-zÀ-ÿ(][^\n]*?)\s*\.\.\./g;
+        var m, out = [], hf = foldText(d.homeTeam || ''), af = foldText(d.awayTeam || '');
+        function like(a, b) { a = foldText(a).trim(); if (!a || !b) return false; return a === b || a.indexOf(b) >= 0 || b.indexOf(a) >= 0 || a.split(' ')[0] === b.split(' ')[0]; }
+        while ((m = re.exec(String(text || ''))) !== null) {
+            var l = m[1], r = m[4], h = parseInt(m[2], 10), a = parseInt(m[3], 10);
+            if (like(l, hf) || like(r, af)) out.push({ h: h, a: a });
+            else if (like(l, af) || like(r, hf)) out.push({ h: a, a: h });
+        }
+        return out;
+    }
+    function reconcileGoals(plays, d) {
+        var lines = plays.map(function (p) { return scoreLinesIn(p.text, d); });
+        if (!lines.some(function (l) { return l.length; })) return;
+        var cur = { h: 0, a: 0 };
+        plays.forEach(function (p, i) {
+            var l = lines[i], sl = l.length ? l[l.length - 1] : null;
+            var wasGoal = p.kind === 'goal' || p.kind === 'own-goal';
+            var changed = sl && (sl.h !== cur.h || sl.a !== cur.a) && sl.h >= cur.h && sl.a >= cur.a;
+            if (changed) {
+                var side = sl.h > cur.h ? 'home' : 'away';
+                var own = /autogol|propia puerta/i.test(p.text || '');
+                p.kind = own ? 'own-goal' : 'goal';
+                p.scoreSide = side;
+                p.scoreAfter = sl.h + '-' + sl.a;
+                // El equipo de la jugada es el que ataca y marca (en propia puerta, el que se beneficia).
+                p.headerTeam = p.team;
+                p.team = side === 'home' ? d.homeTeam : d.awayTeam;
+                cur = { h: sl.h, a: sl.a };
+                p.target = inferTarget(p.kind, p.team, p.players, d, p.i, p.text, p.lane);
+            } else if (wasGoal) {
+                // «¡Gol!» que no sube al marcador (anulado) o mención suelta: no es un gol.
+                p.kind = classify(String(p.text || '').replace(/autogol|propia puerta|¡+\s*gol\w*!*|go{3,}l\w*|\bgol(?:es)?\b/gi, ' '));
+                p.annulled = /anula|no sube|no vale/i.test(p.text || '');
+                p.target = inferTarget(p.kind, p.team, p.players, d, p.i, p.text, p.lane);
+            }
+        });
+    }
+
     function markKickoffs(plays, d) {
         var firstHalfKicker = null, etKicker = null;
         var seen46 = false, seen91 = false, seen106 = false;
@@ -575,6 +621,7 @@
                 target: inferTarget(kind, team, players, d, i, text, lane)
             };
         });
+        reconcileGoals(parsedPlays, d);
         markKickoffs(parsedPlays, d);
         var kicks = parseShootoutKicks(d);
         if (kicks.length) {
@@ -1191,7 +1238,6 @@
         var scorer = namedPlayers(players, play.players, attack).pop() || namedPlayers(players, play.players).pop();
         var cornerY = ballT.y < 50 ? 26 : 74;
         var meetX = attack === 'home' ? 78 : 22;
-        if (play.kind === 'own-goal') meetX = attack === 'home' ? 24 : 76;
         if (scorer) placeAt(scorer, meetX, cornerY);
         var mates = ofSide(players, attack).filter(function (p) { return p !== scorer && p.pos !== 'GK'; });
         var n = mates.length;
@@ -2892,7 +2938,7 @@
         var other = side === 'home' ? 'away' : side === 'away' ? 'home' : null;
         var named = sideMentioned(play.text, d) || side;
         if (play.kind === 'goal' || play.kind === 'own-goal') {
-            var scorer = play.kind === 'own-goal' ? other : side;
+            var scorer = play.scoreSide || side;
             if (scorer) { setMood(scorer, 'celebrate'); setMood(scorer === 'home' ? 'away' : 'home', 'despair'); }
             return;
         }
@@ -3167,7 +3213,7 @@
         var cel = null, kick = null;
         phases.forEach(function (ph) { if (ph.pose === true && !cel) cel = ph; if (ph.pose === false) kick = ph; });
         if (!cel) return;
-        var scorerSide = play.kind === 'own-goal' ? (attack === 'home' ? 'away' : 'home') : attack;
+        var scorerSide = attack;
         // El balón entra de verdad en la portería: el último punto antes de la celebración va a la red.
         var ci = phases.indexOf(cel);
         var shotPh = ci > 0 ? phases[ci - 1] : null;
@@ -3925,7 +3971,7 @@
                 seg.pose = poseS != null ? poseS : Math.max(seg.s0, ns - 2);
                 seg.goalS = goalS;
                 seg.sadEnd = sadEnd != null ? sadEnd : (goalS != null ? Math.min(ns, goalS + Math.round(4 / SAMPLE_DT)) : null);
-                seg.scorerSide = play.kind === 'goal' ? plan.info.attack : (play.kind === 'own-goal' ? (plan.info.attack === 'home' ? 'away' : 'home') : null);
+                seg.scorerSide = play.kind === 'goal' || play.kind === 'own-goal' ? plan.info.attack : null;
                 seg.bench = h.bench; seg.out = h.out;
                 if (goalS != null && !simEvents.some(function (e) { return e.type === 'kickoff' && e.s >= goalS; })) simEvents.push({ s: Math.max(goalS, ns - 2), type: 'kickoff', x: 50, y: 50 });
                 segs.push(seg);
@@ -3964,7 +4010,30 @@
             }
         }
         segs.forEach(function (sg, k) { sg.k = k; if (sg.i >= 0) segByPlay[sg.i] = sg; });
-        return { events: simEvents.slice(), figs: figs, fidx: fidx, N: N, S: ns, X: X, Y: Y, V: V, F: F, BX: BX, BY: BY, BH: BH, BS: BS, BO: BO,
+        // Marcador y reacciones de los banquillos ligados al instante de la línea de tiempo en que pasa
+        // lo narrado (el balón entra, el árbitro pita la falta o el penalti...), no al de la narración.
+        var scoreTimes = [], reacts = [];
+        var evSorted = simEvents.slice().sort(function (a, b) { return a.s - b.s; });
+        segs.forEach(function (sg) {
+            if (sg.i < 0) return;
+            var pl = plays[sg.i];
+            if (!pl) return;
+            var isG = pl.kind === 'goal' || pl.kind === 'own-goal';
+            if (isG) scoreTimes.push({ i: sg.i, s: sg.goalS != null ? sg.goalS : sg.s1, side: pl.scoreSide || sideOfTeam(pl.team, dInit) || 'home' });
+            var key = isG ? (sg.goalS != null ? sg.goalS : sg.s1) : null;
+            if (key == null) {
+                for (var ek = 0; ek < evSorted.length; ek++) {
+                    var e = evSorted[ek];
+                    if (e.s < sg.s0) continue;
+                    if (e.s > sg.s1 + 30) break;
+                    if (/^(free|wall|penalty|offside|protest|var|appeal)$/.test(e.type) && (e.play == null || e.play === sg.i)) { key = e.s; break; }
+                }
+            }
+            if (key == null) key = sg.s0 + 1;
+            reacts.push({ i: sg.i, s: key });
+        });
+        reacts.sort(function (a, b) { return a.s - b.s; });
+        return { scoreTimes: scoreTimes, reacts: reacts, events: simEvents.slice(), figs: figs, fidx: fidx, N: N, S: ns, X: X, Y: Y, V: V, F: F, BX: BX, BY: BY, BH: BH, BS: BS, BO: BO,
             segs: segs, segByPlay: segByPlay, squad: lh.squad, ms: performance.now() - t0, plays: plays.length,
             fixedPasses: segs.reduce(function (a, sg) { return a + (sg.fixed || 0); }, 0) };
     }
@@ -4111,7 +4180,7 @@
             var res = null;
             try { res = resolvePlay(play, Object.assign({}, d)); } catch (e) { res = null; }
             if (res && res.highlight) highlightPlayers(res.highlight);
-            if (!immediate) { managerReact(play, d); varFx(play); }
+            // Las reacciones (banquillos, VAR) salen cuando la reproducción llega al momento (tlFrame).
         } else highlightPlayers([]);
     }
 
@@ -4175,6 +4244,11 @@
         if (tl.events && pb.lastS >= 0 && !pb.snap && s > pb.lastS && s - pb.lastS < 25) {
             for (var ei = 0; ei < tl.events.length; ei++) { var ev = tl.events[ei]; if (ev.s > pb.lastS && ev.s <= s) showTag(ev); }
         }
+        if (tl.reacts && pb.lastS >= 0 && !pb.snap && s > pb.lastS && s - pb.lastS < 25) {
+            var dR = data(), plR = dR ? buildPlays(dR) : [];
+            for (var ri2 = 0; ri2 < tl.reacts.length; ri2++) { var rc = tl.reacts[ri2]; if (rc.s > pb.lastS && rc.s <= s && plR[rc.i]) { managerReact(plR[rc.i], dR); varFx(plR[rc.i]); } }
+        }
+        if (ui.score && !dragging) { var dS = data(); if (dS) { var stx = tlScoreText(s, dS); if (stx && ui.score.textContent !== stx) ui.score.textContent = stx; } }
         pb.lastS = s; pb.snap = false;
         var ns = nodeScale !== 1 ? ' scale(' + nodeScale.toFixed(3) + ')' : '';
         var wob = Math.min(1, pb.held / 1.2);
@@ -4267,7 +4341,7 @@
         var top = root && root.querySelector('svg');
         if (!top || !d) return;
         var plays = buildPlays(d);
-        var score = previewScore(plays, seg.i, d);
+        var score = tlScoreText(seg.goalS, d) || previewScore(plays, seg.i, d);
         var team = seg.scorerSide === 'home' ? d.homeTeam : d.awayTeam;
         var old = top.querySelector('.campo-goal-banner');
         if (old) old.remove();
@@ -4393,7 +4467,8 @@
             p = plays[i];
             if (!p) continue;
             if (p.kind === 'goal' || p.kind === 'own-goal') {
-                if (p.team === d.homeTeam) h++;
+                if (p.scoreSide) { if (p.scoreSide === 'home') h++; else a++; }
+                else if (p.team === d.homeTeam) h++;
                 else if (p.team === d.awayTeam) a++;
             }
         }
@@ -4421,6 +4496,18 @@
         return { h: h, a: a };
     }
 
+    // Marcador en un instante de la línea de tiempo: goles cuyo balón ya ha entrado (y la tanda, si la hay).
+    function tlScoreText(s, d) {
+        if (!tl || !tl.scoreTimes || !d) return null;
+        var h = 0, a = 0, idx = -1;
+        tl.scoreTimes.forEach(function (g) { if (g.s <= s) { if (g.side === 'home') h++; else a++; } });
+        tl.segs.forEach(function (sg) { if (sg.i >= 0 && sg.s0 <= s) idx = sg.i; });
+        var text = h + ' - ' + a;
+        var pens = idx >= 0 ? shootoutScoreAt(buildPlays(d), idx, d) : null;
+        if (pens) text += ' (pen ' + pens.h + '-' + pens.a + ')';
+        return text;
+    }
+
     function previewScore(plays, idx, d) {
         var reg = regularScoreAt(plays, idx, d);
         var pens = shootoutScoreAt(plays, idx, d);
@@ -4441,7 +4528,10 @@
         setCaption(play, d);
         var label = playMinuteLabel(play);
         if (ui.min) ui.min.textContent = label;
-        if (ui.score) ui.score.textContent = previewScore(buildPlays(d), play.i, d);
+        if (ui.score) {
+            var sgP = tl && tl.segByPlay ? tl.segByPlay[play.i] : null;
+            ui.score.textContent = (sgP && tlScoreText(immediate ? sgP.pose : pb.s, d)) || previewScore(buildPlays(d), play.i, d);
+        }
         updatePensBoard(buildPlays(d), play.i, d);
         var narrEl = $('narration');
         var minEl = $('minute');
@@ -4809,7 +4899,10 @@
         if (ui.score && !dragging) {
             var playsNow = buildPlays(d);
             var idxNow = play ? play.i : -1;
-            if (idxNow >= 0 && (d.finished || (play && (play.kind === 'shootout' || play.kind === 'shootout-kick')))) {
+            if (tl && pb.seg && tl.scoreTimes) {
+                // El marcador sigue a la reproducción: sube cuando el balón entra, no cuando lo narra el texto.
+                ui.score.textContent = tlScoreText(pb.s, d);
+            } else if (idxNow >= 0 && (d.finished || (play && (play.kind === 'shootout' || play.kind === 'shootout-kick')))) {
                 ui.score.textContent = previewScore(playsNow, idxNow, d);
             } else {
                 ui.score.textContent = d.score || '0 - 0';
@@ -5120,6 +5213,8 @@
             tlFrame(0);
             return { seg: sg.i, kind: sg.kind };
         },
+        debugScoreAt: function (s) { var d = data(); return d ? String(tlScoreText(s, d) || '').replace(/\s*\(.*\)/, '').replace(/\s/g, '') : null; },
+        debugTl: function () { var d = data(); return { tl: tl, plays: d ? buildPlays(d) : [], d: d, M_X: M_X, M_Y: M_Y, PITCH: PITCH, nodeScale: nodeScale }; },
         debugBuild: function () { var t0 = performance.now(); buildTimeline(tlData); return Math.round(performance.now() - t0); },
         debugBall: function (a, b) {
             var out = []; for (var q = a; q < Math.min(b, tl.S); q++) out.push(q + ':' + tl.BX[q].toFixed(1) + ',' + tl.BY[q].toFixed(1) + ',' + tl.BH[q].toFixed(1) + ',' + tl.BS[q] + ',' + tl.BO[q] + ',' + simDbg[q]);
