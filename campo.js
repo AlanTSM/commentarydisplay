@@ -3369,7 +3369,8 @@
 
     /* ---------------- Sesiones 15-17: reanudaciones (banda, puerta, córner, centro), faltas con y sin
        barrera, fueras de juego, linieres y protestas. Todo ocurre dentro de la simulación del coreógrafo. ---- */
-    var simDbg = [], simSegT = 99, tlData = null, simNextKind = null;
+    var simDbg = [], simSegT = 99, tlData = null, simNextKind = null, simNextText = '';
+    var FK_GOAL_RE = /(falta a cargo|lanza la falta|lanzamiento de falta|la falta se cuela|golpeo de falta|libre directo|tiro libre|ejecuta la falta|falta directa|saca la falta|clava la falta|de falta)/;
     var simRestart = null, simEvents = [], simNs = 0, simAR = [], simGoalPlay = false, simAttackSide = 'home', simExiting = false;
     var RESTART_PREP = { throw: 1.3, goalkick: 1.9, corner: 2.1, free: 1.5, wall: 2.8, offside: 1.8, penalty: 2.6 };
     var EVENT_LABEL = { throw: 'Saque de banda', goalkick: 'Saque de puerta', corner: 'Córner', free: 'Falta', wall: 'Falta · barrera',
@@ -3432,7 +3433,7 @@
         if (simRestart) restartKick(simRestart);
         var r = { type: sp.type, side: sp.side, spot: { x: clamp(sp.spot.x, -0.5, 100.5), y: clamp(sp.spot.y, -0.5, 100.5) }, t: 0, stage: 0,
             wall: [], kick: sp.kick || null, prep: RESTART_PREP[sp.wallUp ? 'wall' : sp.type] || 1.6, auto: !!sp.auto, wallUp: !!sp.wallUp,
-            offside: !!sp.offside, protest: sp.protest || null, protestN: sp.protestN || 2, born: simClock, hurry: !!sp.hurry };
+            offside: !!sp.offside, protest: sp.protest || null, protestN: sp.protestN || 2, born: simClock, hurry: !!sp.hurry, hold: !!sp.hold };
         if (r.hurry) r.prep = Math.min(r.prep, 1.4);   // va con retraso: se coloca y se saca rápido
         var inField = ball.x >= -0.2 && ball.x <= 100.2 && ball.y >= -0.2 && ball.y <= 100.2;
         // Lo narrado sale de lo que acaba de pasar: antes de un córner, saque de banda o de puerta el balón
@@ -3643,7 +3644,7 @@
             // ... y los que se colocan alrededor (los del rechace, los que se apartan) ya han llegado: nadie cruza la barrera al lanzar.
             if (wallOk && r.waitK) wallOk = r.waitK.every(function (k) { var st = playerState[k]; return !st || mDist(st.x, st.y, st.tx, st.ty) < 1.0; });
             var ready = ball.state !== 'flight' && dBall <= 1.0 && (!ts || mDist(ts.x, ts.y, r.takerAt.x, r.takerAt.y) < 1.6) && r.t >= r.prep && wallOk;
-            if (ready || r.t > r.prep + (r.hurry ? 1.6 : 4)) {
+            if (!r.hold && (ready || r.t > r.prep + (r.hurry ? 1.6 : 4))) {
                 r.stage = 1; r.t1 = r.t;
                 if (!r.evDone) { simEvent(r.evType, r.spot.x, r.spot.y, restartEvExtra(r)); r.evDone = true; }
                 if (ts && r.type === 'throw') { ts.throwing = true; ball.state = 'held'; ball.owner = r.taker; }
@@ -3769,6 +3770,17 @@
                 setPiece: { type: 'free', side: opp, spot: spotO, offside: true } }];
         }
         if (appeal) first.appeal = opp;
+        if (!isFoul && play.kind === 'goal' && FK_GOAL_RE.test(t) && !/penalti/.test(t)) {
+            // Gol de falta directa: se coloca el balón, barrera si está cerca, y el lanzamiento entra entre los palos.
+            var ggx = goalXOf(attack), gdir = ggx === 100 ? 1 : -1;
+            var gspot = { x: clamp(fp.x, 3, 97), y: clamp(fp.y, 4, 96) };
+            var gdist = Math.hypot((ggx - gspot.x) * M_X, (50 - gspot.y) * M_Y);
+            if (gdist > 32 || gdist < 17) { gspot = { x: ggx - gdir * (20 + rng() * 6) / M_X, y: 38 + rng() * 24 }; gdist = Math.hypot((ggx - gspot.x) * M_X, (50 - gspot.y) * M_Y); }
+            var gside = rng() < 0.5 ? -1 : 1;
+            var gtail = phases.filter(function (ph) { return ph.pose === true || ph.pose === false; });
+            return [{ players: clonePlayers(first.players), ballPath: [{ x: gspot.x, y: gspot.y }], ms: 3600, highlight: first.highlight, ref: null,
+                setPiece: { type: 'free', side: attack, spot: gspot, wallUp: Math.abs(gspot.y - 50) < 30, fkGoal: true, kick: { x: ggx + gdir * 1.8, y: 50 + gside * (2.2 + rng() * 2.4), kind: 'shot', net: true } } }].concat(gtail);
+        }
         if (isFoul) {
             var fouled = opp, fgx = goalXOf(fouled), fdir = fgx === 100 ? 1 : -1;
             var spot = { x: clamp(fp.x, 3, 97), y: clamp(fp.y, 4, 96) };
@@ -3787,8 +3799,11 @@
             }
             var carded = play.kind === 'yellow' || play.kind === 'red';
             var protest = carded || /protest|reclam|airad/.test(t) || rng() < 0.4;
+            // El lanzamiento se narra en la jugada siguiente (gol de falta): aquí solo se coloca y espera.
+            var holdFk = simulating && simNextKind === 'goal' && FK_GOAL_RE.test(simNextText);
+            if (holdFk) kick = null;
             var spPh = { players: clonePlayers(first.players), ballPath: [{ x: spot.x, y: spot.y }], ms: wallUp ? 3600 : 2400, highlight: first.highlight, ref: null,
-                setPiece: { type: 'free', side: fouled, spot: spot, wallUp: wallUp, kick: kick, protest: protest ? attack : null, protestN: carded ? 3 : 2 } };
+                setPiece: { type: 'free', side: fouled, spot: spot, wallUp: wallUp, kick: kick, protest: protest ? attack : null, protestN: carded ? 3 : 2, hold: holdFk } };
             return [first, spPh];
         }
         var penKick = /penalti/.test(t) && (play.kind === 'penalty' || play.kind === 'goal') &&
@@ -4113,6 +4128,7 @@
             var period = 1;
             // Antes del descanso o del final: la falta narrada pendiente se lanza (no se queda sin sacar).
             function finishPending() {
+                if (simRestart) simRestart.hold = false;
                 if (!simRestart && motor.phases && motor.phases.length) {
                     var endSp = null;
                     motor.phases.forEach(function (q) { if (!endSp && q.setPiece) endSp = q.setPiece; });
@@ -4144,6 +4160,7 @@
                 var T = segDur[i];
                 simSegT = T;
                 simNextKind = plays[i + 1] ? plays[i + 1].kind : null;
+                simNextText = plays[i + 1] ? foldText(plays[i + 1].text || '') : '';
                 // Falta, córner... de la jugada anterior que no llegó a empezar: se hace ahora (nunca se pierde).
                 var leftSpPh = null;
                 if (motor.phases && motor.phases.length && !(play.kind === 'sub')) {
@@ -4205,6 +4222,12 @@
                         if (koI >= 0) koLeft = pend.slice(koI).filter(isKo).map(function (q) { var o = Object.assign({}, q); o.ms = Math.min(o.ms || 700, 900); return o; });
                     }
                     if (koLeft.length) phases = koLeft.concat(phases);
+                    // Falta colocada en la jugada anterior y lanzada en esta (gol de falta): el lanzamiento es el de esta jugada.
+                    if (simRestart && simRestart.hold) {
+                        var fkI = phases.findIndex(function (q) { return q.setPiece && q.setPiece.fkGoal; });
+                        if (fkI >= 0) { simRestart.kick = phases[fkI].setPiece.kick; simRestart.born = simClock; phases = phases.slice(0, fkI).concat(phases.slice(fkI + 1)); }
+                        simRestart.hold = false;
+                    }
                     if (leftSpPh) { var lsp = Object.assign({}, leftSpPh); lsp.setPiece = Object.assign({}, leftSpPh.setPiece, { hurry: true }); lsp.ms = Math.min(lsp.ms || 2400, 2400); phases = [lsp].concat(phases); }
                     motor.actions = []; motor.action = null;
                     if (simRestart) { motor.phases = phases.slice(0); motor.phase = null; motor.waitRestart = true; }
@@ -4281,7 +4304,9 @@
                         if (!netTo) netTo = { x: ball.x > 50 ? 101.3 : -1.3, y: 50 };
                         motor.actions = []; motor.action = null;
                         var gxN = netTo.x > 50 ? 100 : 0;
-                        if (ball.state !== 'flight' && mDist(ball.x, ball.y, gxN, 50) > 30) {
+                        if (ball.state === 'flight' && mDist(ball.x, ball.y, gxN, 50) > 30) {
+                            // balón en el aire lejos de la portería: se espera a que lo reciba alguien
+                        } else if (mDist(ball.x, ball.y, gxN, 50) > 30) {
                             // Lejos de la portería: primero llega a un compañero a distancia de tiro y luego remata.
                             goalForce = true;
                             motor.actions = [{ type: 'kick', pt: { x: netTo.x, y: clamp(netTo.y, 45.5, 54.5) }, shot: true, forceKind: 'shot' }];
