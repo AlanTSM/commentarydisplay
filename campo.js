@@ -1610,9 +1610,13 @@
         if (info.mate) path.push({ x: info.mate.tx, y: info.mate.ty });
         // Arrancan todos: medio camino entre la formación de saque y su sitio.
         players.forEach(function (p) {
+            if (p === info.taker || p === info.mate) return;
             p.tx = lerp(p.tx, p.baseX, 0.45);
             p.ty = lerp(p.ty, p.baseY, 0.45);
         });
+        // El que saca no conduce: toca atrás al compañero desde el centro, quieto, y luego se incorpora.
+        if (info.taker) { info.taker.tx = 50 - dir * 1.4; info.taker.ty = 50; }
+        if (recv === info.taker || recv === info.mate) recv = null;
         if (recv) { placeAt(recv, recv.tx - dir * 1.5, recv.ty); path.push({ x: recv.tx, y: recv.ty }); }
         phases.push({ players: snapshotTargets(players), ballPath: path, ms: 700, highlight: [], pose: false, kickoff: true, ref: (function () { var r = kickoffRefSpot(kicker); return { x: r.x + (kicker === 'away' ? -3 : 3), y: r.y - 2 }; })() });
         resetToBase(players);
@@ -2212,7 +2216,32 @@
                 if (recv) to = { x: recv.tx, y: recv.ty };
                 var kind = a.forceKind || (a.shot ? 'shot' : (a.lofted ? 'lofted' : 'ground'));
                 if (recv && owner && recv.side !== owner.side) kind = recv.pos === 'GK' ? 'shot' : 'ground';
+                // Balón suelto lejos del destino: antes de enviarlo, alguien va a por él (nunca viaja solo).
+                if (simulating && a.forceKind !== 'reset' && !ball.lock && !owner && ball.state === 'free' && mDist(ball.x, ball.y, to.x, to.y) > 20 &&
+                    ball.x > 0 && ball.x < 100 && ball.y > 0 && ball.y < 100 && (a.fetchT = (a.fetchT || 0) + dt) < 4) {
+                    var fetch = a.fetcher && playerState[a.fetcher] ? a.fetcher : nearestOf(sideKeys(simAttackSide, true), ball.x, ball.y);
+                    if (!a.fetcher && fetch && mDist(playerState[fetch].x, playerState[fetch].y, ball.x, ball.y) > 15) fetch = nearestOf(sideKeys('home', true).concat(sideKeys('away', true)), ball.x, ball.y) || fetch;
+                    a.fetcher = fetch;
+                    if (fetch) { var fs = playerState[fetch]; fs.tx = ball.x; fs.ty = ball.y; fs.hx = ball.x; fs.hy = ball.y; fs.pend = null; fs.spd = Math.max(fs.spd || 0, 7); }
+                    return;
+                }
                 if (!a.forceKind && (ball.lock || (!owner && ball.state === 'free' && mDist(ball.x, ball.y, to.x, to.y) > 20))) kind = kind === 'shot' ? kind : 'reset';
+                // Remate desde muy lejos: antes, un pase a un compañero a distancia de tiro (20-24 m).
+                if (simulating && (kind === 'shot' || kind === 'over') && !a.approached && !simRestart && ball.x >= 0 && ball.x <= 100) {
+                    var gxS = to.x > 50 ? 100 : 0, dG = mDist(ball.x, ball.y, gxS, 50);
+                    if (dG > 30) {
+                        a.approached = true;
+                        var ux2 = (ball.x - gxS) * M_X, uy2 = (ball.y - 50) * M_Y, ul2 = Math.max(0.1, Math.hypot(ux2, uy2)), dS = 20 + rng() * 4;
+                        var P = { x: gxS + ux2 / ul2 * dS / M_X, y: clamp(50 + uy2 / ul2 * dS / M_Y, 22, 78) };
+                        var sideA = owner ? owner.side : simAttackSide;
+                        var mate = nearestOf(sideKeys(sideA, true).filter(function (k) { return k !== ball.owner; }), P.x, P.y);
+                        if (mate) setMoverTarget(playerState[mate], P.x, P.y, 0.6, { involved: true });
+                        if (ball.owner) { ball.owner = null; ball.state = 'free'; }
+                        launchBall(P, dG - dS > 25 ? 'lofted' : 'ground', mate);
+                        motor.actionT = 0;
+                        return;
+                    }
+                }
                 launchBall(to, kind, a.type === 'pass' ? a.to : null);
                 if ((a.shot && isGoalPoint(to)) || a.forceKind === 'over' || (a.forceKind === 'shot' && (to.x > 100.5 || to.x < -0.5))) ball.fl.net = true;
                 if (a.pt && a.pt.touch === 'def') ball.lastSide = oppOf(simAttackSide);
@@ -3966,6 +3995,11 @@
                 var seg = { i: i, s0: ns, kind: play.kind, period: p, cut: false };
                 // Cambio de campo: cada uno aparece ya en su mitad (la reproducción lo funde a negro y vuelve).
                 if ((p % 2 === 0) !== simFlipped) { simFlipped = !simFlipped; seg.flip = true; seg.jumpFlip = true; }
+                // Descanso (fundido): la segunda parte arranca con el balón ya en el centro.
+                if (seg.jumpFlip && play.kickoffBefore) {
+                    if (simRestart) { simRestart = null; }
+                    ball.x = 50; ball.y = 50; ball.h = 0; ball.state = 'free'; ball.owner = null; ball.fl = null; ball.lock = false; ball.goalNet = false;
+                }
                 period = p;
                 seg.flipped = simFlipped;
                 // Altas que no han entrado por un cambio narrado (por si acaso): aparecen desde el banquillo.
@@ -4027,7 +4061,7 @@
                     } else if (e.type === 'red') simLeave(k, 'red');
                 });
                 var poseS = null, goalS = null, sadEnd = null, lastPhase = motor.phase;
-                var segT0 = simClock, outForced = false, outIdx = -1, sawNet = false, goalJumped = false;
+                var segT0 = simClock, outForced = false, outIdx = -1, sawNet = false, goalJumped = false, goalForce = false;
                 if (phases && !seg.pause) phases.forEach(function (ph, qi) { if (outIdx < 0 && (ph.ballPath || []).some(function (q) { return q.kind === 'shot' || q.kind === 'over'; })) outIdx = qi; });
                 advance(T, ctx, function () {
                     if (motor.phase !== lastPhase) {
@@ -4070,7 +4104,7 @@
                         }
                     }
                     lateGoal = lateGoal && simClock - segT0 > T * 0.55;
-                    if (isGoalPlay && goalS == null && !ball.lock && ((motor.phase && motor.phase.pose === true) || lateGoal) && !(ball.fl && ball.fl.net)) {
+                    if (isGoalPlay && goalS == null && !goalForce && !ball.lock && ((motor.phase && motor.phase.pose === true) || lateGoal) && !(ball.fl && ball.fl.net)) {
                         var celIdx = -1;
                         phases.forEach(function (ph, qi) { if (ph.pose === true && celIdx < 0) celIdx = qi; });
                         if (celIdx >= 0 && motor.phase && motor.phase.pose !== true) motor.phases = phases.slice(celIdx);
@@ -4079,9 +4113,16 @@
                         phases.forEach(function (ph) { (ph.ballPath || []).forEach(function (q) { if (q.kind === 'shot' && (q.x > 100 || q.x < 0)) netTo = q; }); });
                         if (!netTo) netTo = { x: ball.x > 50 ? 101.3 : -1.3, y: 50 };
                         motor.actions = []; motor.action = null;
-                        if (ball.owner) { ball.owner = null; ball.state = 'free'; }
-                        launchBall({ x: netTo.x, y: clamp(netTo.y, 45.5, 54.5) }, 'shot', null);
-                        ball.fl.net = true;
+                        var gxN = netTo.x > 50 ? 100 : 0;
+                        if (ball.state !== 'flight' && mDist(ball.x, ball.y, gxN, 50) > 30) {
+                            // Lejos de la portería: primero llega a un compañero a distancia de tiro y luego remata.
+                            goalForce = true;
+                            motor.actions = [{ type: 'kick', pt: { x: netTo.x, y: clamp(netTo.y, 45.5, 54.5) }, shot: true, forceKind: 'shot' }];
+                        } else {
+                            if (ball.owner) { ball.owner = null; ball.state = 'free'; }
+                            launchBall({ x: netTo.x, y: clamp(netTo.y, 45.5, 54.5) }, 'shot', null);
+                            ball.fl.net = true;
+                        }
                     }
                     if (ball.fl && ball.fl.net) sawNet = true;
                     if (goalS == null && isGoalPlay && ball.lock && sawNet) goalS = ns;
