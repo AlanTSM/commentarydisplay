@@ -4110,9 +4110,24 @@
             simEvents.push({ s: 0, type: 'kickoff', x: 50, y: 50 });
             advance(KICK, { frozen: true });
             var period = 1;
+            // Antes del descanso o del final: la falta narrada pendiente se lanza (no se queda sin sacar).
+            function finishPending() {
+                if (!simRestart && motor.phases && motor.phases.length) {
+                    var endSp = null;
+                    motor.phases.forEach(function (q) { if (!endSp && q.setPiece) endSp = q.setPiece; });
+                    if (endSp) { motor.actions = []; motor.action = null; motor.phases = []; beginRestart(endSp); }
+                }
+                if (simRestart && !simRestart.auto) {
+                    var lastSeg = segs[segs.length - 1], tEnd = simClock + 10;
+                    while (simRestart && simClock < tEnd) advance(0.2, { attack: simAttackSide, frozen: false, search: false });
+                    if (!simRestart) advance(1.2, { attack: simAttackSide, frozen: false, search: false });
+                    if (lastSeg && lastSeg.i >= 0) lastSeg.s1 = ns;
+                }
+            }
             plays.forEach(function (play, i) {
                 var h = lh.hist[i];
                 var p = play.minute === 'tanda' || play.kind === 'shootout' || play.kind === 'shootout-kick' ? period : periodOf(play);
+                if ((p % 2 === 0) !== simFlipped) finishPending();
                 var seg = { i: i, s0: ns, kind: play.kind, period: p, cut: false };
                 // Cambio de campo: cada uno aparece ya en su mitad (la reproducción lo funde a negro y vuelve).
                 if ((p % 2 === 0) !== simFlipped) { simFlipped = !simFlipped; seg.flip = true; seg.jumpFlip = true; }
@@ -4288,12 +4303,7 @@
                 segs.push(seg);
             });
             // Una falta narrada en la última jugada se lanza antes del final (no se queda sin sacar).
-            if (simRestart && !simRestart.auto) {
-                var lastSeg = segs[segs.length - 1], tEnd = simClock + 10;
-                while (simRestart && simClock < tEnd) advance(0.2, { attack: simAttackSide, frozen: false, search: false });
-                if (!simRestart) advance(1.2, { attack: simAttackSide, frozen: false, search: false });
-                if (lastSeg) lastSeg.s1 = ns;
-            }
+            finishPending();
             // Final: todos se retiran por el túnel.
             var ex = { i: -2, s0: ns, kind: 'exit', period: period, flipped: simFlipped };
             if (simRestart) restartKick(simRestart);
