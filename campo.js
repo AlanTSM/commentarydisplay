@@ -4020,8 +4020,9 @@
             motor.phaseT += dt;
             stepAction(dt);
             var busy = motor.action || motor.actions.length || ball.state === 'flight';
-            if (motor.phaseT >= motor.phaseDur && !busy) startMotorPhase(motor.phases.length ? motor.phases.shift() : null);
-            else if (motor.phaseT > motor.phaseDur + 4) { motor.actions = []; motor.action = null; startMotorPhase(motor.phases.length ? motor.phases.shift() : null); }
+            var holdCel = motor.holdNext && motor.phases.length && motor.phases[0].pose === true;   // gol aún sin marcar: nadie celebra antes
+            if (motor.phaseT >= motor.phaseDur && !busy) { if (!holdCel) startMotorPhase(motor.phases.length ? motor.phases.shift() : null); }
+            else if (motor.phaseT > motor.phaseDur + 4 && !holdCel) { motor.actions = []; motor.action = null; startMotorPhase(motor.phases.length ? motor.phases.shift() : null); }
         } else if (ctx.search) simHolderSearch(now, ctx.attack);
         if (!simRestart && !ctx.frozen && ball.state === 'free' && !ball.lock && !ball.goalNet && (!motor.phase || (!motor.action && !motor.actions.length))) simChaseLoose();
         var allowIdle = !simRestart && (!motor.phase || motor.phaseT > motor.phaseDur * 0.9);
@@ -4295,7 +4296,10 @@
                         }
                     }
                     lateGoal = lateGoal && simClock - segT0 > T * 0.55;
-                    if (isGoalPlay && goalS == null && !goalForce && !simRestart && !ball.lock && ((motor.phase && motor.phase.pose === true) || lateGoal) && !(ball.fl && ball.fl.net)) {
+                    motor.holdNext = isGoalPlay && goalS == null;
+                    var stuckPre = isGoalPlay && motor.phase && motor.phases.length && motor.phases[0].pose === true && motor.phaseT >= motor.phaseDur && !motor.action && !motor.actions.length && ball.state !== 'flight';
+                    if (goalForce && goalS == null && !motor.action && !motor.actions.length && ball.state !== 'flight' && !ball.lock) goalForce = false;   // el remate se perdió: se vuelve a intentar
+                    if (isGoalPlay && goalS == null && !goalForce && !simRestart && !ball.lock && ((motor.phase && motor.phase.pose === true) || lateGoal || stuckPre) && !(ball.fl && ball.fl.net)) {
                         var celIdx = -1;
                         phases.forEach(function (ph, qi) { if (ph.pose === true && celIdx < 0) celIdx = qi; });
                         if (celIdx >= 0 && motor.phase && motor.phase.pose !== true) motor.phases = phases.slice(celIdx);
@@ -4321,12 +4325,14 @@
                     if (goalS == null && isGoalPlay && ball.lock && sawNet) goalS = ns;
                 };
                 advance(T, ctx, segStep);
+                motor.holdNext = false;
                 // Gol que llega tarde (la jugada esperó a una falta): la jugada se alarga hasta que el balón entra y se celebra un poco.
                 if ((play.kind === 'goal' || play.kind === 'own-goal') && goalS == null && !seg.pause) {
                     var tMax = simClock + 12;
                     while (goalS == null && simClock < tMax) advance(0.2, ctx, segStep);
                     if (goalS != null) advance(2.4, ctx, segStep);
                 }
+                motor.holdNext = false;
                 seg.s1 = ns;
                 seg.pose = poseS != null ? poseS : Math.max(seg.s0, ns - 2);
                 seg.goalS = goalS;
