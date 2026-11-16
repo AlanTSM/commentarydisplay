@@ -2234,6 +2234,8 @@
                 if (recv) to = { x: recv.tx, y: recv.ty };
                 var kind = a.forceKind || (a.shot ? 'shot' : (a.lofted ? 'lofted' : 'ground'));
                 if (recv && owner && recv.side !== owner.side) kind = recv.pos === 'GK' ? 'shot' : 'ground';
+                // Balón parado dentro del campo tras un remate (parada, rechace): es un balón suelto más, alguien lo recoge.
+                if (simulating && ball.lock && !simRestart && !ball.goalNet && ball.state === 'free' && ball.x >= 0 && ball.x <= 100 && ball.y >= 0 && ball.y <= 100) ball.lock = false;
                 // Balón suelto lejos del destino: antes de enviarlo, alguien va a por él (nunca viaja solo).
                 if (simulating && a.forceKind !== 'reset' && !ball.lock && !owner && ball.state === 'free' && mDist(ball.x, ball.y, to.x, to.y) > 20 &&
                     ball.x > 0 && ball.x < 100 && ball.y > 0 && ball.y < 100 && (a.fetchT = (a.fetchT || 0) + dt) < 4) {
