@@ -3331,7 +3331,7 @@
             var ph = phases[i], bp = ph.ballPath || [];
             if (ph.pose !== false || bp.length !== 1 || Math.abs(bp[0].x - 50) > 0.5 || Math.abs(bp[0].y - 50) > 0.5) continue;
             var nx = phases[i + 1];
-            if (nx && nx.kickPass) continue;
+            if (nx && (nx.kickPass || ((nx.ballPath || []).length >= 2 && mDist(nx.ballPath[0].x, nx.ballPath[0].y, 50, 50) < 0.5))) continue;   // ya hay pase de saque
             var pl = ph.players || {}, taker = null, bd = 1e9;
             Object.keys(pl).forEach(function (k) { var dd = mDist(pl[k].x, pl[k].y, 50, 50); if (dd < bd) { bd = dd; taker = k; } });
             if (!taker || bd > 4) continue;
@@ -4130,6 +4130,15 @@
                     if (leftSp) beginRestart(leftSp);
                 }
                 var plan = planPlay(play, dP);
+                // Tras el descanso (fundido) todos aparecen ya en la formación de saque de centro.
+                if (seg.jumpFlip && play.kickoffBefore && plan.phases[0]) {
+                    var kt = plan.phases[0].players || {};
+                    Object.keys(playerState).forEach(function (k) {
+                        var st = playerState[k], t = kt[k];
+                        if (!t || st.leaving) return;
+                        st.x = t.x; st.y = t.y; st.tx = t.x; st.ty = t.y; st.hx = t.x; st.hy = t.y; st.vx = 0; st.vy = 0; st.pend = null;
+                    });
+                }
                 simGoalPlay = play.kind === 'goal' || play.kind === 'own-goal';
                 simAttackSide = plan.info.attack;
                 // Una reanudación pendiente sigue su curso en la jugada siguiente (la jugada espera); en los goles se ejecuta ya.
