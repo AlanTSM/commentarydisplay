@@ -3648,7 +3648,6 @@
                 return mDist(st.x, st.y, w.x, w.y) < 0.3;
             });
             if (r.wallT) wallClear(r);
-            if (typeof window !== 'undefined' && window.__wdbg && r.wallT) { var dc = playerState['home:De Chiara']; if (dc) window.__wdbg.push([simNs, r.t.toFixed(2), dc.x.toFixed(1), dc.y.toFixed(1), dc.tx.toFixed(1), dc.ty.toFixed(1), JSON.stringify(r.wallT.map(function(w){return [w.x.toFixed(1), w.y.toFixed(1)];})), wallOk]); }
             // ... y los que se colocan alrededor (los del rechace, los que se apartan) ya han llegado: nadie cruza la barrera al lanzar.
             if (wallOk && r.waitK) wallOk = r.waitK.every(function (k) { var st = playerState[k]; return !st || mDist(st.x, st.y, st.tx, st.ty) < 1.0; });
             var ready = ball.state !== 'flight' && dBall <= 1.0 && (!ts || mDist(ts.x, ts.y, r.takerAt.x, r.takerAt.y) < 1.6) && r.t >= r.prep && wallOk;
