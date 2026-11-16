@@ -3341,34 +3341,84 @@
         if (keys.length) simEvent('appeal', ball.x, ball.y, { side: side });
     }
 
+    // Una reanudación narrada que llega con otra automática pendiente del mismo tipo (el balón ya salió
+    // por ese sitio): es la misma; se adopta lo narrado sin repetirla desde otro punto.
+    function restartCompatible(r, sp) {
+        if (!r || !r.auto || r.type !== sp.type || r.side !== sp.side || sp.offside) return false;
+        if (sp.type === 'corner') return (r.spot.x > 50) === (sp.spot.x > 50);
+        return sp.type === 'throw' || sp.type === 'goalkick';
+    }
+
     function beginRestart(sp) {
+        if (simRestart && !sp.auto && restartCompatible(simRestart, sp)) {
+            var pr = simRestart;
+            pr.auto = false;
+            if (sp.kick) pr.kick = sp.kick;
+            if (sp.protest) startProtest(sp.protest, sp.protestN || 2);
+            pr.phase = motor.phase;
+            motor.action = null; motor.actions = [];
+            return;
+        }
         if (simRestart) restartKick(simRestart);
         var r = { type: sp.type, side: sp.side, spot: { x: clamp(sp.spot.x, -0.5, 100.5), y: clamp(sp.spot.y, -0.5, 100.5) }, t: 0, stage: 0,
-            wall: [], kick: sp.kick || null, prep: RESTART_PREP[sp.wallUp ? 'wall' : sp.type] || 1.6, auto: !!sp.auto, wallUp: !!sp.wallUp };
-        var opp = oppOf(sp.side), gx = goalXOf(sp.side);
-        r.taker = sp.type === 'goalkick' ? (gkOf(sp.side) || nearestOf(sideKeys(sp.side), r.spot.x, r.spot.y)) : nearestOf(sideKeys(sp.side, true), r.spot.x, r.spot.y);
-        var aim = r.kick ? { x: r.kick.x, y: r.kick.y } : (sp.type === 'throw' ? { x: r.spot.x, y: 50 } : { x: gx, y: 50 });
+            wall: [], kick: sp.kick || null, prep: RESTART_PREP[sp.wallUp ? 'wall' : sp.type] || 1.6, auto: !!sp.auto, wallUp: !!sp.wallUp,
+            offside: !!sp.offside, protest: sp.protest || null, protestN: sp.protestN || 2 };
+        var inField = ball.x >= -0.2 && ball.x <= 100.2 && ball.y >= -0.2 && ball.y <= 100.2;
+        // Lo narrado sale de lo que acaba de pasar: antes de un córner, saque de banda o de puerta el balón
+        // sale de verdad por ese sitio; una falta se pita donde está el balón (se lleva hasta allí).
+        if (!r.auto && !r.offside && /^(corner|throw|goalkick)$/.test(r.type)) {
+            if (sp.optional && inField && mDist(ball.x, ball.y, r.spot.x, r.spot.y) > 30) return;   // saque de banda inventado: solo si cuadra
+            r.stage = -1; r.need = 'out';
+            if (r.type === 'throw' && inField && Math.abs(ball.x - r.spot.x) * M_X > 16) {
+                r.spot = { x: clamp(ball.x + (r.spot.x > ball.x ? 1 : -1) * 6 / M_X, 2, 98), y: ball.y < 50 ? 0 : 100 };
+                if (r.kick && mDist(r.kick.x, r.kick.y, r.spot.x, r.spot.y) > 26) r.kick = null;
+            }
+            if (r.type === 'throw' && inField) r.spot.y = ball.y < 50 ? 0 : 100;
+            if (r.type === 'corner' && inField) r.spot.y = ball.y < 50 ? 0.6 : 99.4;
+        } else if (!r.auto && !r.offside && (r.type === 'free' || r.type === 'penalty') && inField && mDist(ball.x, ball.y, r.spot.x, r.spot.y) > 6) {
+            r.stage = -1; r.need = 'approach';
+        }
+        if (ball.state === 'held' && r.stage === 0) { ball.state = 'free'; ball.owner = null; }
+        motor.action = null; motor.actions = [];
+        r.phase = motor.phase;
+        simRestart = r;
+        if (r.stage === 0) placeRestart(r);
+    }
+
+    // Colocación de la reanudación (con el balón ya donde toca): lanzador, barrera, área, árbitro.
+    function placeRestart(r) {
+        r.from = { x: ball.x, y: ball.y }; r.whistleNs = simNs;
+        var opp = oppOf(r.side), gx = goalXOf(r.side);
+        r.taker = r.type === 'goalkick' ? (gkOf(r.side) || nearestOf(sideKeys(r.side), r.spot.x, r.spot.y)) : nearestOf(sideKeys(r.side, true), r.spot.x, r.spot.y);
+        var aim = r.kick ? { x: r.kick.x, y: r.kick.y } : (r.type === 'throw' ? { x: r.spot.x, y: 50 } : { x: gx, y: 50 });
         var ux = (aim.x - r.spot.x) * M_X, uy = (aim.y - r.spot.y) * M_Y, ul = Math.max(0.1, Math.hypot(ux, uy));
         ux /= ul; uy /= ul;
-        r.takerAt = sp.type === 'throw' ? { x: r.spot.x, y: r.spot.y < 50 ? -0.9 : 100.9 } : { x: r.spot.x - ux * 1.3 / M_X, y: r.spot.y - uy * 1.3 / M_Y };
+        r.takerAt = r.type === 'throw' ? { x: r.spot.x, y: r.spot.y < 50 ? -0.5 : 100.5 } : { x: r.spot.x - ux * 1.3 / M_X, y: r.spot.y - uy * 1.3 / M_Y };
         if (r.taker) setMoverTarget(playerState[r.taker], r.takerAt.x, r.takerAt.y, 0.9, { involved: true });
         if (r.wallUp) {
             var gdx = (gx - r.spot.x) * M_X, gdy = (50 - r.spot.y) * M_Y, gl = Math.max(0.1, Math.hypot(gdx, gdy));
             var wx = r.spot.x + gdx / gl * 9.15 / M_X, wy = r.spot.y + gdy / gl * 9.15 / M_Y;
             var px = -gdy / gl, py = gdx / gl;
-            var defs = sideKeys(opp, true).sort(byDistTo(wx, wy)).slice(0, 4);
-            defs.forEach(function (k, i) { var o = (i - 1.5) * 1.9; setMoverTarget(playerState[k], wx + px * o / M_X, wy + py * o / M_Y, 1.3, { involved: true }); });
+            // Barrera de 3 o 4 (más cerca, más jugadores), hombro con hombro tal y como se dibujan: sin montarse unos encima de otros.
+            var wN = gl < 24 ? 4 : 3, wGap = 3.5 * sepFactor();
+            var defs = sideKeys(opp, true).sort(byDistTo(wx, wy)).slice(0, wN);
+            r.wallT = [];
+            defs.forEach(function (k, i) {
+                var o = (i - (defs.length - 1) / 2) * wGap, tx = clamp(wx + px * o / M_X, 0.5, 99.5), ty = clamp(wy + py * o / M_Y, 0.5, 99.5);
+                setMoverTarget(playerState[k], tx, ty, 1.3, { involved: true });
+                r.wallT.push({ k: k, x: tx, y: ty });
+            });
             r.wall = defs; r.wallAt = { x: wx, y: wy };
             var gk = gkOf(opp);
             if (gk) setMoverTarget(playerState[gk], gx === 100 ? 99 : 1, clamp(50 + (r.spot.y - 50) * 0.12, 46, 54), 1.2, { involved: true });
             // atacantes esperando el rechace en el área
             var bxA = gx === 100 ? 90 : 10;
-            sideKeys(sp.side, true).filter(function (k) { return k !== r.taker; }).sort(byDistTo(bxA, 50)).slice(0, 3)
+            sideKeys(r.side, true).filter(function (k) { return k !== r.taker; }).sort(byDistTo(bxA, 50)).slice(0, 3)
                 .forEach(function (k, i) { setMoverTarget(playerState[k], bxA, 40 + i * 10, 1.6, { involved: true }); });
         }
-        if (sp.type === 'corner') {
+        if (r.type === 'corner') {
             var bx = gx === 100 ? 93 : 7, dirIn = gx === 100 ? -1 : 1;
-            sideKeys(sp.side, true).filter(function (k) { return k !== r.taker; }).sort(byDistTo(bx, 50)).slice(0, 4)
+            sideKeys(r.side, true).filter(function (k) { return k !== r.taker; }).sort(byDistTo(bx, 50)).slice(0, 4)
                 .forEach(function (k, i) { setMoverTarget(playerState[k], bx + dirIn * (i % 2) * 3, 38 + i * 8, 1.7, { involved: true }); });
             sideKeys(opp, true).sort(byDistTo(bx, 50)).slice(0, 4)
                 .forEach(function (k, i) { setMoverTarget(playerState[k], bx - dirIn * 1.5, 40 + i * 6.5, 1.7, { involved: true }); });
@@ -3377,21 +3427,75 @@
         var rx = clamp(r.spot.x + (50 - r.spot.x) * 0.35, 6, 94), ry = clamp(r.spot.y + (50 - r.spot.y) * 0.35 + 6, 8, 92);
         refState.tx = rx; refState.ty = ry; refState.hx = rx; refState.hy = ry;
         refState.spd = clamp(mDist(refState.x, refState.y, rx, ry) / 1.6, 1.5, 7);
-        if (sp.offside) { var ai = r.spot.x >= 50 ? 0 : 1; if (simAR[ai]) simAR[ai].flagUntil = simClock + 3.0; }
-        if (sp.protest) startProtest(sp.protest, sp.protestN || 2);
+        if (r.offside) { var ai = r.spot.x >= 50 ? 0 : 1; if (simAR[ai]) simAR[ai].flagUntil = simClock + 3.0; }
+        if (r.protest) startProtest(r.protest, r.protestN || 2);
         // El fuera de juego se señala al momento; el resto se rotula cuando el balón está colocado.
-        r.evType = sp.offside ? 'offside' : (r.wallUp ? 'wall' : sp.type);
-        if (sp.offside) { simEvent('offside', r.spot.x, r.spot.y, { side: sp.side }); r.evDone = true; }
+        r.evType = r.offside ? 'offside' : (r.wallUp ? 'wall' : r.type);
+        if (r.offside) { simEvent('offside', r.spot.x, r.spot.y, { side: r.side }); r.evDone = true; }
         if (ball.state === 'held') { ball.state = 'free'; ball.owner = null; }
         ball.lock = true;
         motor.action = null; motor.actions = [];
         r.phase = motor.phase;
-        simRestart = r;
+    }
+
+    // Antes de la reanudación: el balón sale por donde se va a sacar, o llega a donde se pita la falta.
+    function stepRestartPre(r, dt) {
+        var outNow = ball.x < -0.2 || ball.x > 100.2 || ball.y < -0.2 || ball.y > 100.2;
+        function go() { r.stage = 0; r.t = 0; r.rest = 0; placeRestart(r); }
+        if (r.need === 'out') {
+            if (!r.launched) {
+                if (ball.state === 'flight' && r.t < 1.4) return;
+                if (outNow && ball.state !== 'flight') { go(); return; }
+                var to;
+                if (r.type === 'corner') to = { x: r.spot.x > 50 ? 101.6 : -1.6, y: r.spot.y < 50 ? 5 + rng() * 14 : 81 + rng() * 14 };
+                else if (r.type === 'goalkick') to = { x: r.spot.x > 50 ? 101.6 : -1.6, y: rng() < 0.5 ? 22 + rng() * 18 : 60 + rng() * 18 };
+                else to = { x: clamp(r.spot.x + (rng() - 0.5) * 3, 1, 99), y: r.spot.y < 50 ? -1.6 : 101.6 };
+                if (ball.state === 'held') { ball.state = 'free'; ball.owner = null; }
+                var far = mDist(ball.x, ball.y, to.x, to.y);
+                launchBall(to, far > 30 ? 'lofted' : 'ground', null);
+                ball.fl.keep = true;
+                // Último toque: el rival del que va a sacar (despeje o desvío de un defensa en el córner).
+                ball.lastSide = oppOf(r.side);
+                r.launched = true;
+                return;
+            }
+            if (ball.state !== 'flight') { r.rest = (r.rest || 0) + dt; if (r.rest > 0.45) go(); }
+            if (r.t > 6) go();
+            return;
+        }
+        // Falta: el balón llega a donde se comete y entonces pita el árbitro.
+        var dB = mDist(ball.x, ball.y, r.spot.x, r.spot.y);
+        if (ball.state !== 'flight' && dB <= 3.5) { r.spot = { x: clamp(ball.x, 1, 99), y: clamp(ball.y, 1, 99) }; go(); return; }
+        if (!r.launched && (ball.state !== 'flight' || r.t > 1.4)) {
+            var recv = nearestOf(sideKeys(r.side, true), r.spot.x, r.spot.y);
+            if (ball.state === 'held') { ball.state = 'free'; ball.owner = null; }
+            launchBall({ x: r.spot.x, y: r.spot.y }, dB > 30 ? 'lofted' : 'ground', recv);
+            if (recv) setMoverTarget(playerState[recv], r.spot.x, r.spot.y, 0.8, { involved: true });
+            var fouler = nearestOf(sideKeys(oppOf(r.side), true), r.spot.x, r.spot.y);
+            if (fouler) setMoverTarget(playerState[fouler], r.spot.x + (r.side === 'home' ? 1.2 : -1.2), r.spot.y, 0.8, { involved: true });
+            r.launched = true;
+            return;
+        }
+        if (r.t > 4.5) {
+            if (ball.state !== 'flight' && !outNow) r.spot = { x: clamp(ball.x, 1, 99), y: clamp(ball.y, 1, 99) };
+            go();
+        }
+    }
+
+    // Datos de la reanudación para el auditor: barrera, punto de origen (falta o salida del balón).
+    function restartEvExtra(r) {
+        var ex = { side: r.side, t: Math.round(r.t * 10) / 10 };
+        if (r.wallUp && r.wallAt) { var wv = simVisOf(r.wallAt.x, r.wallAt.y); ex.wallAt = { x: wv.x, y: wv.y }; ex.wall = r.wall.slice(); }
+        if (r.from) { var fv = simVisOf(r.from.x, r.from.y); ex.from = { x: fv.x, y: fv.y }; }
+        if (r.whistleNs != null) ex.whistle = r.whistleNs;
+        if (r.need) ex.need = r.need;
+        return ex;
     }
 
     function stepRestart(dt) {
         var r = simRestart;
         r.t += dt;
+        if (r.stage < 0) { stepRestartPre(r, dt); return; }
         var ts = r.taker ? playerState[r.taker] : null;
         if (r.stage === 0) {
             var dBall = mDist(ball.x, ball.y, r.spot.x, r.spot.y);
@@ -3404,16 +3508,24 @@
                 ball.fl.keep = true;
             }
             if (ts) { ts.tx = r.takerAt.x; ts.ty = r.takerAt.y; ts.hx = ts.tx; ts.hy = ts.ty; ts.pend = null; ts.spd = Math.max(ts.spd || 0, 5.5); }
-            var ready = ball.state !== 'flight' && dBall <= 1.0 && (!ts || mDist(ts.x, ts.y, r.takerAt.x, r.takerAt.y) < 1.6) && r.t >= r.prep;
+            // La barrera se coloca entera antes de que se lance (cada uno en su sitio, sin montarse).
+            var wallOk = !r.wallT || r.wallT.every(function (w) {
+                var st = playerState[w.k];
+                if (!st) return true;
+                st.tx = w.x; st.ty = w.y; st.hx = w.x; st.hy = w.y; st.pend = null; st.spd = Math.max(st.spd || 0, 5);
+                return mDist(st.x, st.y, w.x, w.y) < 0.6;
+            });
+            var ready = ball.state !== 'flight' && dBall <= 1.0 && (!ts || mDist(ts.x, ts.y, r.takerAt.x, r.takerAt.y) < 1.6) && r.t >= r.prep && wallOk;
             if (ready || r.t > r.prep + 4) {
                 r.stage = 1; r.t1 = r.t;
-                if (!r.evDone) { simEvent(r.evType, r.spot.x, r.spot.y, { side: r.side }); r.evDone = true; }
+                if (!r.evDone) { simEvent(r.evType, r.spot.x, r.spot.y, restartEvExtra(r)); r.evDone = true; }
                 if (ts && r.type === 'throw') { ts.throwing = true; ball.state = 'held'; ball.owner = r.taker; }
             }
         } else if (r.t - r.t1 > (r.type === 'throw' ? 0.75 : 0.45)) restartKick(r);
     }
 
     function restartKick(r) {
+        if (r.stage < 0) { simRestart = null; ball.lock = false; if (ball.fl) ball.fl.keep = false; return; }   // aún no había salido / llegado: se abandona
         var to = null, kind = 'ground', recv = null;
         var gx = goalXOf(r.side), dir = gx === 100 ? 1 : -1;
         var mates = sideKeys(r.side, true).filter(function (k) { return k !== r.taker; });
@@ -3428,7 +3540,7 @@
         if (!to) to = { x: fromAtt(55, r.side), y: 50 };
         if (recv && playerState[recv]) setMoverTarget(playerState[recv], to.x, to.y, 0.8, { involved: true });
         var ts = r.taker ? playerState[r.taker] : null;
-        if (!r.evDone) { simEvent(r.evType, r.spot.x, r.spot.y, { side: r.side }); r.evDone = true; }
+        if (!r.evDone) { simEvent(r.evType, r.spot.x, r.spot.y, restartEvExtra(r)); r.evDone = true; }
         if (ts) ts.throwing = false;
         if (ball.state === 'held') { ball.state = 'free'; ball.owner = null; }
         simRestart = null;
@@ -3474,6 +3586,13 @@
         }
         lines.forEach(function (tx, i) {
             var a = simAR[i];
+            // Con un saque de banda en su banda, el linier se aparta para no taparse con el que saca.
+            var rT = simRestart && simRestart.type === 'throw' && simRestart.takerAt;
+            if (rT && (i === 0) === (rT.y < 50) && Math.abs(tx - rT.x) < 8) {
+                var away = tx >= rT.x ? 1 : -1;
+                if (rT.x + away * 8 > 99 || rT.x + away * 8 < 1) away = -away;
+                tx = rT.x + away * 8;
+            }
             a.tx = tx; a.ty = i === 0 ? -2.3 : 101.9;
             a.spd = clamp(Math.abs(tx - a.x) * M_X * 1.3, 0.5, 7);
             stepMover(a, dt, 1);
@@ -3558,7 +3677,7 @@
         var q0 = (phases[0].ballPath || [])[0];
         if (play.kind === 'play' && q0 && !phases[0].setPiece && simSegT >= 3.9 && rng() < 0.6) {
             var tdir = attack === 'home' ? 1 : -1, ty = q0.y < 50 ? 0 : (q0.y > 50 ? 100 : (rng() < 0.5 ? 0 : 100));
-            phases[0].setPiece = { type: 'throw', side: attack, spot: { x: clamp(q0.x - tdir * (4 + rng() * 6), 4, 96), y: ty }, kick: { x: q0.x, y: q0.y, kind: 'lofted' } };
+            phases[0].setPiece = { type: 'throw', side: attack, spot: { x: clamp(q0.x - tdir * (4 + rng() * 6), 4, 96), y: ty }, kick: { x: q0.x, y: q0.y, kind: 'lofted' }, optional: true };
             phases[0].ms = Math.max(phases[0].ms || 700, 2200);
             return;
         }
@@ -3857,7 +3976,7 @@
                 simGoalPlay = play.kind === 'goal' || play.kind === 'own-goal';
                 simAttackSide = plan.info.attack;
                 // Una reanudación pendiente sigue su curso en la jugada siguiente (la jugada espera); en los goles se ejecuta ya.
-                if (simRestart && (simGoalPlay || plan.phases.some(function (q) { return q.setPiece || (q.ballPath || []).some(function (pt) { return pt.kind === 'shot' || pt.kind === 'over'; }); }))) restartKick(simRestart);
+                if (simRestart && simRestart.stage >= 0 && (simGoalPlay || plan.phases.some(function (q) { return q.setPiece || (q.ballPath || []).some(function (pt) { return pt.kind === 'shot' || pt.kind === 'over'; }); }))) restartKick(simRestart);
                 seg.attack = plan.info.attack; seg.outcome = plan.info.outcome; seg.fixed = plan.info.fixed;
                 var isSub = h.events.some(function (e) { return e.type === 'sub'; });
                 var ctx = { attack: plan.info.attack, frozen: false, search: true };
@@ -4275,6 +4394,9 @@
                     node.el.classList.toggle('campo-on-stretcher', fl === 2);
                     node.el.classList.toggle('campo-sent-off', fl === 3);
                     node.el.classList.toggle('campo-throwing', fl === 5);
+                    // Saque de banda: los brazos (y el balón) hacia el campo, nunca fuera del dibujo.
+                    var armsEl = node.el.querySelector('.campo-arms');
+                    if (armsEl) armsEl.setAttribute('transform', fl === 5 && y < 50 ? 'scale(1,-1)' : '');
                     node.el.classList.toggle('campo-flag-up', fl === 6);
                     node.el.classList.toggle('campo-protest', fl === 7);
                     node.flag = fl;
@@ -4296,6 +4418,11 @@
         if (own >= 0 && tl.BS[k] === 0 && tl.V[k * N + own]) {
             // pegado al pie del poseedor tal y como se dibuja (incluido su desfase)
             bx += pb.off[own * 2]; by += pb.off[own * 2 + 1];
+        }
+        if (own >= 0 && tl.BS[k] === 0 && tl.F[k * N + own] === 5) {
+            // En las manos del que saca de banda, hacia el campo.
+            var tyT = pb.disp[own * 2 + 1];
+            bx = pb.disp[own * 2]; by = tyT + (tyT < 50 ? 1 : -1) * 30 * nodeScale / PITCH.h * 100; bh = 0;
         }
         pb.boff[0] *= decay; pb.boff[1] *= decay;
         bx += pb.boff[0]; by += pb.boff[1];
